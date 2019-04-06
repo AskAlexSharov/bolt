@@ -138,7 +138,7 @@ func TestOpen_ErrVersionMismatch(t *testing.T) {
 
 	// Reopen data file.
 	if _, err := bolt.Open(path, 0666, nil); err != bolt.ErrVersionMismatch {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

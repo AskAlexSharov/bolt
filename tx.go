@@ -104,15 +104,15 @@ func (tx *Tx) Bucket(name []byte) *Bucket {
 // CreateBucket creates a new bucket.
 // Returns an error if the bucket already exists, if the bucket name is blank, or if the bucket name is too long.
 // The bucket instance is only valid for the lifetime of the transaction.
-func (tx *Tx) CreateBucket(name []byte) (*Bucket, error) {
-	return tx.root.CreateBucket(name)
+func (tx *Tx) CreateBucket(name []byte, enum bool) (*Bucket, error) {
+	return tx.root.CreateBucket(name, enum)
 }
 
 // CreateBucketIfNotExists creates a new bucket if it doesn't already exist.
 // Returns an error if the bucket name is blank, or if the bucket name is too long.
 // The bucket instance is only valid for the lifetime of the transaction.
-func (tx *Tx) CreateBucketIfNotExists(name []byte) (*Bucket, error) {
-	return tx.root.CreateBucketIfNotExists(name)
+func (tx *Tx) CreateBucketIfNotExists(name []byte, enum bool) (*Bucket, error) {
+	return tx.root.CreateBucketIfNotExists(name, enum)
 }
 
 // DeleteBucket deletes a bucket.
@@ -291,9 +291,7 @@ func (tx *Tx) close() {
 }
 
 // Copy writes the entire database to a writer.
-// This function exists for backwards compatibility.
-//
-// Deprecated; Use WriteTo() instead.
+// This function exists for backwards compatibility. Use WriteTo() instead.
 func (tx *Tx) Copy(w io.Writer) error {
 	_, err := tx.WriteTo(w)
 	return err
@@ -502,7 +500,7 @@ func (tx *Tx) write() error {
 			}
 
 			// Update statistics.
-			tx.stats.Write++
+			tx.stats.Write += sz
 
 			// Exit inner for loop if we've written all the chunks.
 			size -= sz
@@ -517,7 +515,7 @@ func (tx *Tx) write() error {
 	}
 
 	// Ignore file sync if flag is set on DB.
-	if !tx.db.NoSync || IgnoreNoSync {
+	if (!tx.db.NoSync || IgnoreNoSync) && !tx.db.memOnly {
 		if err := fdatasync(tx.db); err != nil {
 			return err
 		}
@@ -554,7 +552,7 @@ func (tx *Tx) writeMeta() error {
 	if _, err := tx.db.ops.writeAt(buf, int64(p.id)*int64(tx.db.pageSize)); err != nil {
 		return err
 	}
-	if !tx.db.NoSync || IgnoreNoSync {
+	if (!tx.db.NoSync || IgnoreNoSync) && !tx.db.memOnly {
 		if err := fdatasync(tx.db); err != nil {
 			return err
 		}
