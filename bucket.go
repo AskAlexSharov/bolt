@@ -267,7 +267,8 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 // Returns a nil value if the key does not exist or if the key is a nested bucket.
 // The returned value is only valid for the life of the transaction.
 func (b *Bucket) Get(key []byte) ([]byte, uint64) {
-	k, v, idx, flags := b.Cursor().seek(key)
+	c := b.Cursor()
+	k, v, flags := c.seek(key)
 
 	// Return nil if this is a bucket.
 	if (flags & bucketLeafFlag) != 0 {
@@ -278,7 +279,7 @@ func (b *Bucket) Get(key []byte) ([]byte, uint64) {
 	if !bytes.Equal(key, k) {
 		return nil, 0
 	}
-	return v, idx
+	return v, c.idx
 }
 
 // Put sets the value for a key in the bucket.
