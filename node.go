@@ -202,7 +202,7 @@ func (n *node) read(p *page) {
 	n.inodes = make(inodes, int(p.count))
 	prefix := p.keyPrefix()
 	minSize := p.minsize
-	enum := n.bucket.enum
+	enum := n.bucket != nil && n.bucket.enum
 
 	for i := 0; i < int(p.count); i++ {
 		inode := &n.inodes[i]
