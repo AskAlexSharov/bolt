@@ -32,14 +32,14 @@ func (c *Cursor) Bucket() *Bucket {
 func (c *Cursor) First() (key []byte, value []byte) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
 	c.stack = c.stack[:0]
-	p, n := c.bucket.pageNode(c.bucket.root)
-	c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
+	n := c.bucket.lookupNode(c.bucket.root)
+	c.stack = append(c.stack, elemRef{pageID: c.bucket.root, node: n, index: 0})
 	c.idx = 0
 	c.first()
 
 	// If we land on an empty page then move to the next value.
 	// https://github.com/boltdb/bolt/issues/450
-	if c.stack[len(c.stack)-1].count() == 0 {
+	if c.stack[len(c.stack)-1].count(c.bucket) == 0 {
 		c.next()
 	}
 
@@ -57,15 +57,15 @@ func (c *Cursor) First() (key []byte, value []byte) {
 func (c *Cursor) Last() (key []byte, value []byte) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
 	c.stack = c.stack[:0]
-	p, n := c.bucket.pageNode(c.bucket.root)
-	ref := elemRef{page: p, node: n}
-	ref.index = ref.count() - 1
+	n := c.bucket.lookupNode(c.bucket.root)
+	ref := elemRef{pageID: c.bucket.root, node: n}
+	ref.index = ref.count(c.bucket) - 1
 	if c.bucket.enum {
 		var idx uint64
-		e := elemRef{page: p, node: n}
-		for i, cnt := 0, ref.count(); i < cnt; i++ {
+		e := elemRef{pageID: c.bucket.root, node: n}
+		for i, cnt := 0, ref.count(c.bucket); i < cnt; i++ {
 			e.index = i
-			idx += e.size()
+			idx += e.size(c)
 		}
 		c.idx = idx - 1
 	}
@@ -129,7 +129,7 @@ func (c *Cursor) Seek(seek []byte) (key []byte, value []byte) {
 	k, v, flags := c.seek(seek)
 
 	// If we ended up after the last element of a page then move to the next one.
-	if ref := &c.stack[len(c.stack)-1]; ref.index >= ref.count() {
+	if ref := &c.stack[len(c.stack)-1]; ref.index >= ref.count(c.bucket) {
 		k, v, flags = c.next()
 	}
 
@@ -145,7 +145,7 @@ func (c *Cursor) SeekTo(seek []byte) (key []byte, value []byte) {
 	k, v, flags := c.seekTo(seek)
 
 	// If we ended up after the last element of a page then move to the next one.
-	if ref := &c.stack[len(c.stack)-1]; ref.index >= ref.count() {
+	if ref := &c.stack[len(c.stack)-1]; ref.index >= ref.count(c.bucket) {
 		k, v, flags = c.next()
 	}
 
@@ -188,7 +188,7 @@ func (c *Cursor) seek(seek []byte) (key []byte, value []byte, flags uint32) {
 	ref := &c.stack[len(c.stack)-1]
 
 	// If the cursor is pointing to the end of page/node then return nil.
-	if ref.index >= ref.count() {
+	if ref.index >= ref.count(c.bucket) {
 		return nil, nil, 0
 	}
 
@@ -212,16 +212,14 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 			pageid = n.pgid
 			if len(n.inodes) > 0 {
 				lastkey = n.inodes[len(n.inodes)-1].key
-			} else {
-				//fmt.Printf("len(n.inodes) == 0 %x\n", seek)
 			}
 		} else {
-			p := elem.page
+			p := c.bucket.lookupPage(elem.pageID)
 			if p.count == 0 {
 				break
 			}
 			pageid = p.id
-			if elem.isLeaf() {
+			if elem.isLeaf(c.bucket) {
 				lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
 			} else {
 				if c.bucket.enum {
@@ -236,10 +234,10 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 		} else {
 			if c.bucket.enum {
 				var idx uint64
-				e := elemRef{node: elem.node, page: elem.page}
-				for i, cnt := elem.index, e.count(); i < cnt; i++ {
+				e := elemRef{node: elem.node, pageID: elem.pageID}
+				for i, cnt := elem.index, e.count(c.bucket); i < cnt; i++ {
 					e.index = i
-					idx += e.size()
+					idx += e.size(c)
 				}
 				c.idx += idx
 			}
@@ -261,7 +259,7 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 	ref := &c.stack[len(c.stack)-1]
 
 	// If the cursor is pointing to the end of page/node then return nil.
-	if ref.index >= ref.count() {
+	if ref.index >= ref.count(c.bucket) {
 		return nil, nil, 0
 	}
 
@@ -273,7 +271,7 @@ func (c *Cursor) first() {
 	for {
 		// Exit when we hit a leaf page.
 		var ref = &c.stack[len(c.stack)-1]
-		if ref.isLeaf() {
+		if ref.isLeaf(c.bucket) {
 			break
 		}
 
@@ -282,14 +280,15 @@ func (c *Cursor) first() {
 		if ref.node != nil {
 			pgid = ref.node.inodes[ref.index].pgid
 		} else {
+			p := c.bucket.lookupPage(ref.pageID)
 			if c.bucket.enum {
-				pgid = ref.page.branchPageElementX(uint16(ref.index)).pgid
+				pgid = p.branchPageElementX(uint16(ref.index)).pgid
 			} else {
-				pgid = ref.page.branchPageElement(uint16(ref.index)).pgid
+				pgid = p.branchPageElement(uint16(ref.index)).pgid
 			}
 		}
-		p, n := c.bucket.pageNode(pgid)
-		c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
+		n := c.bucket.lookupNode(pgid)
+		c.stack = append(c.stack, elemRef{pageID: pgid, node: n, index: 0})
 	}
 }
 
@@ -298,7 +297,7 @@ func (c *Cursor) last() {
 	for {
 		// Exit when we hit a leaf page.
 		ref := &c.stack[len(c.stack)-1]
-		if ref.isLeaf() {
+		if ref.isLeaf(c.bucket) {
 			break
 		}
 
@@ -307,16 +306,17 @@ func (c *Cursor) last() {
 		if ref.node != nil {
 			pgid = ref.node.inodes[ref.index].pgid
 		} else {
+			p := c.bucket.lookupPage(ref.pageID)
 			if c.bucket.enum {
-				pgid = ref.page.branchPageElementX(uint16(ref.index)).pgid
+				pgid = p.branchPageElementX(uint16(ref.index)).pgid
 			} else {
-				pgid = ref.page.branchPageElement(uint16(ref.index)).pgid
+				pgid = p.branchPageElement(uint16(ref.index)).pgid
 			}
 		}
-		p, n := c.bucket.pageNode(pgid)
+		n := c.bucket.lookupNode(pgid)
 
-		var nextRef = elemRef{page: p, node: n}
-		nextRef.index = nextRef.count() - 1
+		var nextRef = elemRef{pageID: pgid, node: n}
+		nextRef.index = nextRef.count(c.bucket) - 1
 		c.stack = append(c.stack, nextRef)
 	}
 }
@@ -330,7 +330,7 @@ func (c *Cursor) next() (key []byte, value []byte, flags uint32) {
 		var i int
 		for i = len(c.stack) - 1; i >= 0; i-- {
 			elem := &c.stack[i]
-			if elem.index < elem.count()-1 {
+			if elem.index < elem.count(c.bucket)-1 {
 				elem.index++
 				c.idx++
 				break
@@ -350,7 +350,7 @@ func (c *Cursor) next() (key []byte, value []byte, flags uint32) {
 
 		// If this is an empty page then restart and move back up the stack.
 		// https://github.com/boltdb/bolt/issues/450
-		if c.stack[len(c.stack)-1].count() == 0 {
+		if c.stack[len(c.stack)-1].count(c.bucket) == 0 {
 			continue
 		}
 
@@ -367,11 +367,11 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 	l := len(c.stack)
 	if l > 0 {
 		e = &c.stack[l-1]
-		p = e.page
 		n = e.node
-		if p != nil && p.id == pgid {
-			newElement = false
-		} else if n != nil && n.pgid == pgid {
+		if n == nil {
+			p = c.bucket.lookupPage(e.pageID)
+		}
+		if (p != nil && p.id == pgid) || (n != nil && n.pgid == pgid) {
 			newElement = false
 		}
 	}
@@ -381,12 +381,12 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 			panic(fmt.Sprintf("invalid page type: %d: %x", p.id, p.flags))
 		}
 
-		e = &elemRef{page: p, node: n}
+		e = &elemRef{pageID: pgid, node: n}
 		c.stack = append(c.stack, *e)
 	}
 
 	// If we're on a leaf page/node then find the specific node.
-	if e.isLeaf() {
+	if e.isLeaf(c.bucket) {
 		c.nsearch(key)
 		return
 	}
@@ -412,7 +412,7 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 		e := elemRef{node: n}
 		for i, cnt := offset, index; i < cnt; i++ {
 			e.index = i
-			idx += e.size()
+			idx += e.size(c)
 		}
 		c.idx += idx
 	}
@@ -459,10 +459,10 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	}
 	if c.bucket.enum {
 		var idx uint64
-		e := elemRef{page: p}
+		e := elemRef{pageID: p.id}
 		for i, cnt := offset, index; i < cnt; i++ {
 			e.index = i
-			idx += e.size()
+			idx += e.size(c)
 		}
 		c.idx += idx
 	}
@@ -479,7 +479,7 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 // nsearch searches the leaf node on the top of the stack for a key.
 func (c *Cursor) nsearch(key []byte) {
 	e := &c.stack[len(c.stack)-1]
-	p, n := e.page, e.node
+	n := e.node
 	offset := e.index
 
 	// If we have a node then search its inodes.
@@ -496,6 +496,7 @@ func (c *Cursor) nsearch(key []byte) {
 	}
 
 	// If we have a page then search its leaf elements.
+	p := c.bucket.lookupPage(e.pageID)
 	inodes := p.leafPageElements()
 	pagePrefix := p.keyPrefix()
 	keyPrefix := key
@@ -526,7 +527,7 @@ func (c *Cursor) nsearch(key []byte) {
 // keyValue returns the key and value of the current leaf element.
 func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 	ref := &c.stack[len(c.stack)-1]
-	if ref.count() == 0 || ref.index >= ref.count() {
+	if ref.count(c.bucket) == 0 || ref.index >= ref.count(c.bucket) {
 		return nil, nil, 0
 	}
 
@@ -537,8 +538,9 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 	}
 
 	// Or retrieve value from page.
-	elem := ref.page.leafPageElement(uint16(ref.index))
-	return append(ref.page.keyPrefix(), elem.key()...), elem.value(), elem.flags
+	p := c.bucket.lookupPage(ref.pageID)
+	elem := p.leafPageElement(uint16(ref.index))
+	return append(p.keyPrefix(), elem.key()...), elem.value(), elem.flags
 }
 
 // node returns the node that the cursor is currently positioned on.
@@ -546,14 +548,14 @@ func (c *Cursor) node() *node {
 	_assert(len(c.stack) > 0, "accessing a node with a zero-length cursor stack")
 
 	// If the top of the stack is a leaf node then just return it.
-	if ref := &c.stack[len(c.stack)-1]; ref.node != nil && ref.isLeaf() {
+	if ref := &c.stack[len(c.stack)-1]; ref.node != nil && ref.isLeaf(c.bucket) {
 		return ref.node
 	}
 
 	// Start from root and traverse down the hierarchy.
 	var n = c.stack[0].node
 	if n == nil {
-		n = c.bucket.node(c.stack[0].page.id, nil)
+		n = c.bucket.node(c.stack[0].pageID, nil)
 	}
 	for _, ref := range c.stack[:len(c.stack)-1] {
 		_assert(!n.isLeaf, "expected branch node")
@@ -565,34 +567,38 @@ func (c *Cursor) node() *node {
 
 // elemRef represents a reference to an element on a given page/node.
 type elemRef struct {
-	page  *page
-	node  *node
-	index int
+	pageID pgid
+	pNil   bool
+	node   *node
+	index  int
 }
 
 // isLeaf returns whether the ref is pointing at a leaf page/node.
-func (r *elemRef) isLeaf() bool {
+func (r *elemRef) isLeaf(b *Bucket) bool {
 	if r.node != nil {
 		return r.node.isLeaf
 	}
-	return (r.page.flags & leafPageFlag) != 0
+	p := b.lookupPage(r.pageID)
+	return (p.flags & leafPageFlag) != 0
 }
 
 // count returns the number of inodes or page elements.
-func (r *elemRef) count() int {
+func (r *elemRef) count(b *Bucket) int {
 	if r.node != nil {
 		return len(r.node.inodes)
 	}
-	return int(r.page.count)
+	p := b.lookupPage(r.pageID)
+	return int(p.count)
 }
 
 // Assumes that the enum is turned on
-func (r *elemRef) size() uint64 {
+func (r *elemRef) size(c *Cursor) uint64 {
 	if r.node != nil {
 		return r.node.inodes[r.index].size
 	}
-	if (r.page.flags & branchPageFlag) == 0 {
+	p := c.bucket.lookupPage(r.pageID)
+	if (p.flags & branchPageFlag) == 0 {
 		return 1
 	}
-	return uint64(r.page.branchPageElementX(uint16(r.index)).size) + r.page.minsize
+	return uint64(p.branchPageElementX(uint16(r.index)).size) + p.minsize
 }
