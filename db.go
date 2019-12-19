@@ -324,7 +324,6 @@ func (db *DB) mmap(minsz int) error {
 	if err0 != nil && err1 != nil {
 		return err0
 	}
-
 	return nil
 }
 
@@ -609,6 +608,19 @@ func (db *DB) removeTx(tx *Tx) {
 	db.stats.OpenTxN = n
 	db.stats.TxStats.add(&tx.stats)
 	db.statlock.Unlock()
+}
+
+// yielfTx indicates that it is ok to interrupt transaction (for resizing memory map, for example)
+// It informs the database that all the keys and values retrieved by `bucket.Get`,
+// `bucket.First()`, `bucket.Next()`, `bucket.Last()`, `bucket.Seek()` have been consumed,
+// or copied, and it is ok to invalidate the memory underneath them.
+func (db *DB) yieldTx(tx *Tx) {
+	// If the db.mmap() function is trying to aquire exclusive lock on db.mmaplock
+	// when we release this read lock, it won't allow more readers (read-only) transactions
+	// to begin. Therefore, before we re-lock with db.mmaplock.Rlock(), the db.mmap()
+	// would have had the opportunity to resize the memory map and fix our raw pointers
+	db.mmaplock.RUnlock()
+	db.mmaplock.RLock()
 }
 
 // Update executes a function within the context of a read-write managed transaction.

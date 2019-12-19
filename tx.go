@@ -290,6 +290,21 @@ func (tx *Tx) close() {
 	tx.pages = nil
 }
 
+// Yield indicates that it is ok to interrupt transaction (for resizing memory map, for example)
+// It informs the database that all the keys and values retrieved by `bucket.Get`,
+// `bucket.First()`, `bucket.Next()`, `bucket.Last()`, `bucket.Seek()` have been consumed,
+// or copied, and it is ok to invalidate the memory underneath them.
+// Only works for read-only transactions.
+func (tx *Tx) Yield() {
+	if tx.writable {
+		panic("Yielding is not possible for writeable transactions")
+	}
+	if tx.db == nil {
+		panic("Trying to yeild closed transaction")
+	}
+	tx.db.yieldTx(tx)
+}
+
 // Copy writes the entire database to a writer.
 // This function exists for backwards compatibility. Use WriteTo() instead.
 func (tx *Tx) Copy(w io.Writer) error {

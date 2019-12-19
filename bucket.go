@@ -133,17 +133,14 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 func (b *Bucket) openBucket(value []byte) *Bucket {
 	var child = newBucket(b.tx)
 
-	// If unaligned load/stores are broken on this arch and value is
-	// unaligned simply clone to an aligned byte array.
-	unaligned := brokenUnaligned && uintptr(unsafe.Pointer(&value[0]))&3 != 0
-
-	if unaligned {
+	// clone the value so that it survices resize of memory map
+	if !b.tx.writable {
 		value = cloneBytes(value)
 	}
 
 	// If this is a writable transaction then we need to copy the bucket entry.
 	// Read-only transactions can point directly at the mmap entry.
-	if b.tx.writable && !unaligned {
+	if b.tx.writable {
 		child.bucket = &bucket{}
 		*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
 	} else {
@@ -314,7 +311,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 		// Increment size on all references starting from the top
 		var n = c.stack[0].node
 		if n == nil {
-			n = c.bucket.node(c.stack[0].page.id, nil)
+			n = c.bucket.node(c.stack[0].pageID, nil)
 		}
 		for _, ref := range c.stack[:len(c.stack)-1] {
 			_assert(!n.isLeaf, "expected branch node")
@@ -375,7 +372,7 @@ func (b *Bucket) MultiPut(pairs ...[]byte) error {
 				// Increment size on all references starting from the top
 				var n = c.stack[0].node
 				if n == nil {
-					n = c.bucket.node(c.stack[0].page.id, nil)
+					n = c.bucket.node(c.stack[0].pageID, nil)
 				}
 				for _, ref := range c.stack[:len(c.stack)-1] {
 					_assert(!n.isLeaf, "expected branch node")
@@ -420,7 +417,7 @@ func (b *Bucket) MultiGet(pairs ...[]byte) (values [][]byte, err error) {
 			k, v, flags = c.seekTo(start)
 		}
 		// If we ended up after the last element of a page then move to the next one.
-		if ref := &c.stack[len(c.stack)-1]; ref.index >= ref.count() {
+		if ref := &c.stack[len(c.stack)-1]; ref.index >= ref.count(b) {
 			k, v, flags = c.next()
 		}
 		// Skip bucket value
@@ -461,7 +458,7 @@ func (b *Bucket) Delete(key []byte) error {
 		// Decrement size on all references starting from the top
 		var n = c.stack[0].node
 		if n == nil {
-			n = c.bucket.node(c.stack[0].page.id, nil)
+			n = c.bucket.node(c.stack[0].pageID, nil)
 		}
 		for _, ref := range c.stack[:len(c.stack)-1] {
 			_assert(!n.isLeaf, "expected branch node")
@@ -866,6 +863,43 @@ func (b *Bucket) dereference() {
 	for _, child := range b.buckets {
 		child.dereference()
 	}
+}
+
+// lookupNode returns node with given page id, but only if it has
+// already been created, if not, it returns nul
+func (b *Bucket) lookupNode(id pgid) *node {
+	// Inline buckets have a fake page embedded in their value so treat them
+	// differently. We'll return the rootNode (if available) or the fake page.
+	if b.root == 0 {
+		if id != 0 {
+			panic(fmt.Sprintf("inline bucket non-zero page access(2): %d != 0", id))
+		}
+		if b.rootNode != nil {
+			return b.rootNode
+		}
+		return nil
+	}
+
+	// Check the node cache for non-inline buckets.
+	if b.nodes != nil {
+		if n := b.nodes[id]; n != nil {
+			return n
+		}
+	}
+	return nil
+}
+
+// lookupPage returns page with given page id
+// If the bucket is an inline bucket, it returns
+// its fake page regardless of the argument id
+func (b *Bucket) lookupPage(id pgid) *page {
+	if b.root == 0 {
+		if id != 0 {
+			panic(fmt.Sprintf("inline bucket non-zero page access(2): %d != 0", id))
+		}
+		return b.page
+	}
+	return b.tx.page(id)
 }
 
 // pageNode returns the in-memory node, if it exists.
