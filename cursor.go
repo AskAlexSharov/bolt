@@ -466,9 +466,9 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 		inodes = p.branchPageElements()
 	}
 
-	var pagePrefix []byte
-	if c.bucket.tx.db.KeysPrefixCompression {
-		pagePrefix = p.keyPrefix()
+	pagePrefix := p.keyPrefix()
+	if !c.bucket.tx.db.KeysPrefixCompression {
+		_assert(len(pagePrefix) > 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
 	keyPrefix := key
@@ -537,9 +537,9 @@ func (c *Cursor) nsearch(key []byte) {
 	// If we have a page then search its leaf elements.
 	p := c.bucket.lookupPage(e.pageID)
 	inodes := p.leafPageElements()
-	var pagePrefix []byte
-	if c.bucket.tx.db.KeysPrefixCompression {
-		pagePrefix = p.keyPrefix()
+	pagePrefix := p.keyPrefix()
+	if !c.bucket.tx.db.KeysPrefixCompression {
+		_assert(len(pagePrefix) > 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 	keyPrefix := key
 	if len(key) > len(pagePrefix) {
