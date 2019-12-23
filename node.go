@@ -42,17 +42,19 @@ func (n *node) size() int {
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
-		if prefix == nil {
-			prefix = item.key
-		} else {
-			l := len(prefix)
-			if len(item.key) < l {
-				l = len(item.key)
+		if n.bucket.tx.db.KeysPrefixCompression {
+			if prefix == nil {
+				prefix = item.key
+			} else {
+				l := len(prefix)
+				if len(item.key) < l {
+					l = len(item.key)
+				}
+				var j int
+				for j = 0; j < l && prefix[j] == item.key[j]; j++ {
+				}
+				prefix = prefix[:j]
 			}
-			var j int
-			for j = 0; j < l && prefix[j] == item.key[j]; j++ {
-			}
-			prefix = prefix[:j]
 		}
 		sz += elsz + len(item.key) + len(item.value)
 	}
@@ -68,17 +70,19 @@ func (n *node) sizeLessThan(v int) bool {
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
-		if prefix == nil {
-			prefix = item.key
-		} else {
-			l := len(prefix)
-			if len(item.key) < l {
-				l = len(item.key)
+		if n.bucket.tx.db.KeysPrefixCompression {
+			if prefix == nil {
+				prefix = item.key
+			} else {
+				l := len(prefix)
+				if len(item.key) < l {
+					l = len(item.key)
+				}
+				var j int
+				for j = 0; j < l && prefix[j] == item.key[j]; j++ {
+				}
+				prefix = prefix[:j]
 			}
-			var j int
-			for j = 0; j < l && prefix[j] == item.key[j]; j++ {
-			}
-			prefix = prefix[:j]
 		}
 		sz += elsz + len(item.key) + len(item.value)
 		if sz-len(prefix)*i >= v {
@@ -209,18 +213,30 @@ func (n *node) read(p *page) {
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
 			inode.flags = elem.flags
-			inode.key = append(prefix, elem.key()...)
+			if n.bucket.tx.db.KeysPrefixCompression {
+				inode.key = append(prefix, elem.key()...)
+			} else {
+				inode.key = elem.key()
+			}
 			inode.value = elem.value()
 		} else {
 			if enum {
 				elem := p.branchPageElementX(uint16(i))
 				inode.pgid = elem.pgid
-				inode.key = append(prefix, elem.key()...)
+				if n.bucket.tx.db.KeysPrefixCompression {
+					inode.key = append(prefix, elem.key()...)
+				} else {
+					inode.key = elem.key()
+				}
 				inode.size = minSize + uint64(elem.size)
 			} else {
 				elem := p.branchPageElement(uint16(i))
 				inode.pgid = elem.pgid
-				inode.key = append(prefix, elem.key()...)
+				if n.bucket.tx.db.KeysPrefixCompression {
+					inode.key = append(prefix, elem.key()...)
+				} else {
+					inode.key = elem.key()
+				}
 			}
 		}
 		_assert(len(inode.key) > 0, "read: zero-length inode key")
@@ -256,21 +272,24 @@ func (n *node) write(p *page) {
 
 	// Calculate common prefix and minSize
 	var prefix []byte
-	enum := n.bucket.enum
 	var minSize uint64 = 0
+	enum := n.bucket.enum
 	for _, item := range n.inodes {
-		if prefix == nil {
-			prefix = item.key
-		} else {
-			l := len(prefix)
-			if len(item.key) < l {
-				l = len(item.key)
+		if n.bucket.tx.db.KeysPrefixCompression {
+			if prefix == nil {
+				prefix = item.key
+			} else {
+				l := len(prefix)
+				if len(item.key) < l {
+					l = len(item.key)
+				}
+				var j int
+				for j = 0; j < l && prefix[j] == item.key[j]; j++ {
+				}
+				prefix = prefix[:j]
 			}
-			var j int
-			for j = 0; j < l && prefix[j] == item.key[j]; j++ {
-			}
-			prefix = prefix[:j]
 		}
+
 		if enum && (minSize == 0 || item.size < minSize) {
 			minSize = item.size
 		}
@@ -418,17 +437,19 @@ func (n *node) splitIndex(threshold int) (index, sz int) {
 	for i := 0; i < len(n.inodes)-minKeysPerPage; i++ {
 		index = i
 		inode := n.inodes[i]
-		if prefix == nil {
-			prefix = inode.key
-		} else {
-			l := len(prefix)
-			if len(inode.key) < l {
-				l = len(inode.key)
+		if n.bucket.tx.db.KeysPrefixCompression {
+			if prefix == nil {
+				prefix = inode.key
+			} else {
+				l := len(prefix)
+				if len(inode.key) < l {
+					l = len(inode.key)
+				}
+				var j int
+				for j = 0; j < l && prefix[j] == inode.key[j]; j++ {
+				}
+				prefix = prefix[:j]
 			}
-			var j int
-			for j = 0; j < l && prefix[j] == inode.key[j]; j++ {
-			}
-			prefix = prefix[:j]
 		}
 		elsize := n.pageElementSize() + len(inode.key) + len(inode.value)
 

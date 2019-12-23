@@ -19,7 +19,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/boltdb/bolt"
+	"github.com/ledgerwatch/bolt"
 )
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
@@ -191,7 +191,7 @@ func TestOpen_Size(t *testing.T) {
 
 	// Insert until we get above the minimum 4MB size.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, _ := tx.CreateBucketIfNotExists([]byte("data"))
+		b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
 		for i := 0; i < 10000; i++ {
 			if err := b.Put([]byte(fmt.Sprintf("%04d", i)), make([]byte, 1000)); err != nil {
 				t.Fatal(err)
@@ -257,7 +257,7 @@ func TestOpen_Size_Large(t *testing.T) {
 	var index uint64
 	for i := 0; i < 10000; i++ {
 		if err := db.Update(func(tx *bolt.Tx) error {
-			b, _ := tx.CreateBucketIfNotExists([]byte("data"))
+			b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
 			for j := 0; j < 1000; j++ {
 				if err := b.Put(u64tob(index), make([]byte, 50)); err != nil {
 					t.Fatal(err)
@@ -391,7 +391,7 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b, err := wtx.CreateBucket([]byte("test"))
+	b, err := wtx.CreateBucket([]byte("test"), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +511,7 @@ func TestDB_Update(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -530,10 +530,10 @@ func TestDB_Update(t *testing.T) {
 	}
 	if err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
-		if v := b.Get([]byte("foo")); v != nil {
+		if v, _ := b.Get([]byte("foo")); v != nil {
 			t.Fatalf("expected nil value, got: %v", v)
 		}
-		if v := b.Get([]byte("baz")); !bytes.Equal(v, []byte("bat")) {
+		if v, _ := b.Get([]byte("baz")); !bytes.Equal(v, []byte("bat")) {
 			t.Fatalf("unexpected value: %v", v)
 		}
 		return nil
@@ -546,7 +546,7 @@ func TestDB_Update(t *testing.T) {
 func TestDB_Update_Closed(t *testing.T) {
 	var db bolt.DB
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -673,7 +673,7 @@ func TestDB_Update_Panic(t *testing.T) {
 		}()
 
 		if err := db.Update(func(tx *bolt.Tx) error {
-			if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
+			if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
 				t.Fatal(err)
 			}
 			panic("omg")
@@ -684,7 +684,7 @@ func TestDB_Update_Panic(t *testing.T) {
 
 	// Verify we can update again.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -721,7 +721,7 @@ func TestDB_View_Panic(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -763,7 +763,7 @@ func TestDB_Stats(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"), false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -784,7 +784,7 @@ func TestDB_Consistency(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"), false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -871,7 +871,7 @@ func TestDB_Batch(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -901,7 +901,7 @@ func TestDB_Batch(t *testing.T) {
 	if err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		for i := 0; i < n; i++ {
-			if v := b.Get(u64tob(uint64(i))); v == nil {
+			if v, _ := b.Get(u64tob(uint64(i))); v == nil {
 				t.Errorf("key not found: %d", i)
 			}
 		}
@@ -946,7 +946,7 @@ func TestDB_BatchFull(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"), false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -991,7 +991,7 @@ func TestDB_BatchFull(t *testing.T) {
 	if err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		for i := 1; i <= size; i++ {
-			if v := b.Get(u64tob(uint64(i))); v == nil {
+			if v, _ := b.Get(u64tob(uint64(i))); v == nil {
 				t.Errorf("key not found: %d", i)
 			}
 		}
@@ -1005,7 +1005,7 @@ func TestDB_BatchTime(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"), false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -1038,7 +1038,7 @@ func TestDB_BatchTime(t *testing.T) {
 	if err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		for i := 1; i <= size; i++ {
-			if v := b.Get(u64tob(uint64(i))); v == nil {
+			if v, _ := b.Get(u64tob(uint64(i))); v == nil {
 				t.Errorf("key not found: %d", i)
 			}
 		}
@@ -1058,7 +1058,7 @@ func ExampleDB_Update() {
 
 	// Execute several commands within a read-write transaction.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			return err
 		}
@@ -1072,7 +1072,7 @@ func ExampleDB_Update() {
 
 	// Read the value back from a separate read-only transaction.
 	if err := db.View(func(tx *bolt.Tx) error {
-		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+		value, _ := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 		fmt.Printf("The value of 'foo' is: %s\n", value)
 		return nil
 	}); err != nil {
@@ -1098,7 +1098,7 @@ func ExampleDB_View() {
 
 	// Insert data into a bucket.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("people"))
+		b, err := tx.CreateBucket([]byte("people"), false)
 		if err != nil {
 			return err
 		}
@@ -1115,7 +1115,7 @@ func ExampleDB_View() {
 
 	// Access data from within a read-only transactional block.
 	if err := db.View(func(tx *bolt.Tx) error {
-		v := tx.Bucket([]byte("people")).Get([]byte("john"))
+		v, _ := tx.Bucket([]byte("people")).Get([]byte("john"))
 		fmt.Printf("John's last name is %s.\n", v)
 		return nil
 	}); err != nil {
@@ -1141,7 +1141,7 @@ func ExampleDB_Begin_ReadOnly() {
 
 	// Create a bucket using a read-write transaction.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"), false)
 		return err
 	}); err != nil {
 		log.Fatal(err)
@@ -1194,7 +1194,7 @@ func BenchmarkDBBatchAutomatic(b *testing.B) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("bench"))
+		_, err := tx.CreateBucket([]byte("bench"), false)
 		return err
 	}); err != nil {
 		b.Fatal(err)
@@ -1239,7 +1239,7 @@ func BenchmarkDBBatchSingle(b *testing.B) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("bench"))
+		_, err := tx.CreateBucket([]byte("bench"), false)
 		return err
 	}); err != nil {
 		b.Fatal(err)
@@ -1283,7 +1283,7 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("bench"))
+		_, err := tx.CreateBucket([]byte("bench"), false)
 		return err
 	}); err != nil {
 		b.Fatal(err)
@@ -1339,7 +1339,7 @@ func validateBatchBench(b *testing.B, db *DB) {
 			h.Reset()
 			_, _ = h.Write(buf[:])
 			k := h.Sum(nil)
-			v := bucket.Get(k)
+			v, _ := bucket.Get(k)
 			if v == nil {
 				b.Errorf("not found id=%d key=%x", id, k)
 				continue

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/boltdb/bolt"
+	"github.com/ledgerwatch/bolt"
 )
 
 func TestSimulate_1op_1p(t *testing.T)     { testSimulate(t, 1, 1) }
@@ -145,7 +145,7 @@ func simulateGetHandler(tx *bolt.Tx, qdb *QuickDB) {
 
 	// Verify key/value on the final bucket.
 	expected := qdb.Get(keys)
-	actual := b.Get(keys[len(keys)-1])
+	actual, _ := b.Get(keys[len(keys)-1])
 	if !bytes.Equal(actual, expected) {
 		fmt.Println("=== EXPECTED ===")
 		fmt.Println(expected)
@@ -164,7 +164,7 @@ func simulatePutHandler(tx *bolt.Tx, qdb *QuickDB) {
 	// Retrieve root bucket.
 	b := tx.Bucket(keys[0])
 	if b == nil {
-		b, err = tx.CreateBucket(keys[0])
+		b, err = tx.CreateBucket(keys[0], false)
 		if err != nil {
 			panic("create bucket: " + err.Error())
 		}
@@ -176,7 +176,7 @@ func simulatePutHandler(tx *bolt.Tx, qdb *QuickDB) {
 		if child != nil {
 			b = child
 		} else {
-			b, err = b.CreateBucket(key)
+			b, err = b.CreateBucket(key, false)
 			if err != nil {
 				panic("create bucket: " + err.Error())
 			}
