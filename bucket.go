@@ -750,17 +750,19 @@ func (b *Bucket) inlineable() bool {
 	var prefix []byte
 	for i, inode := range n.inodes {
 		size += leafPageElementSize + len(inode.key) + len(inode.value)
-		if prefix == nil {
-			prefix = inode.key
-		} else {
-			l := len(prefix)
-			if len(inode.key) < l {
-				l = len(inode.key)
+		if b.tx.db.KeysPrefixCompression {
+			if prefix == nil {
+				prefix = inode.key
+			} else {
+				l := len(prefix)
+				if len(inode.key) < l {
+					l = len(inode.key)
+				}
+				var j int
+				for j = 0; j < l && prefix[j] == inode.key[j]; j++ {
+				}
+				prefix = prefix[:j]
 			}
-			var j int
-			for j = 0; j < l && prefix[j] == inode.key[j]; j++ {
-			}
-			prefix = prefix[:j]
 		}
 		if inode.flags&bucketLeafFlag != 0 {
 			return false
