@@ -206,7 +206,7 @@ func (n *node) read(p *page) {
 	n.inodes = make(inodes, int(p.count))
 	prefix := p.keyPrefix()
 	if !n.bucket.tx.db.KeysPrefixCompression {
-		_assert(len(prefix) > 0, "key prefix: non-zero prefix in db with disabled keys compression")
+		_assert(len(prefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 	minSize := p.minsize
 	enum := n.bucket != nil && n.bucket.enum
@@ -301,7 +301,7 @@ func (n *node) write(p *page) {
 	p.prefixpos = uint32(n.pageElementSize() * len(n.inodes))
 	p.prefixsize = uint32(plen)
 	if !n.bucket.tx.db.KeysPrefixCompression {
-		_assert(plen > 0, "key prefix: non-zero prefix in db with disabled keys compression")
+		_assert(plen == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
 	p.minsize = minSize

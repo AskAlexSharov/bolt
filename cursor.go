@@ -468,7 +468,7 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 
 	pagePrefix := p.keyPrefix()
 	if !c.bucket.tx.db.KeysPrefixCompression {
-		_assert(len(pagePrefix) > 0, "key prefix: non-zero prefix in db with disabled keys compression")
+		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
 	keyPrefix := key
@@ -539,7 +539,7 @@ func (c *Cursor) nsearch(key []byte) {
 	inodes := p.leafPageElements()
 	pagePrefix := p.keyPrefix()
 	if !c.bucket.tx.db.KeysPrefixCompression {
-		_assert(len(pagePrefix) > 0, "key prefix: non-zero prefix in db with disabled keys compression")
+		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 	keyPrefix := key
 	if len(key) > len(pagePrefix) {
