@@ -306,12 +306,15 @@ func (n *node) write(p *page) {
 
 	p.minsize = minSize
 	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
-	// Write prefix
-	if len(b) < plen {
-		b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
+	if n.bucket.tx.db.KeysPrefixCompression {
+		// Write prefix
+		if len(b) < plen {
+			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
+		}
+		copy(b[0:], prefix)
+		b = b[plen:]
 	}
-	copy(b[0:], prefix)
-	b = b[plen:]
+
 	// Loop over each item and write it to the page.
 	for i, item := range n.inodes {
 		_assert(len(item.key) > 0, "write: zero-length inode key")
