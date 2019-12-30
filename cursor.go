@@ -220,12 +220,24 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 			}
 			pageid = p.id
 			if elem.isLeaf(c.bucket) {
-				lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
+				if c.bucket.tx.db.KeysPrefixCompression {
+					lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
+				} else {
+					lastkey = p.leafPageElement(p.count - 1).key()
+				}
 			} else {
 				if c.bucket.enum {
-					lastkey = append(p.keyPrefix(), p.branchPageElementX(p.count-1).key()...)
+					if c.bucket.tx.db.KeysPrefixCompression {
+						lastkey = append(p.keyPrefix(), p.branchPageElementX(p.count-1).key()...)
+					} else {
+						lastkey = p.branchPageElementX(p.count - 1).key()
+					}
 				} else {
-					lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
+					if c.bucket.tx.db.KeysPrefixCompression {
+						lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
+					} else {
+						lastkey = p.branchPageElement(p.count - 1).key()
+					}
 				}
 			}
 		}
@@ -422,6 +434,28 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 	c.search(key, n.inodes[index].pgid)
 }
 
+func (c *Cursor) searchPage2(key []byte, p *page) {
+	// Binary search for the correct range.
+	inodes := p.branchPageElements()
+
+	var exact bool
+	index := sort.Search(int(p.count), func(i int) bool {
+		// TODO(benbjohnson): Optimize this range search. It's a bit hacky right now.
+		// sort.Search() finds the lowest index where f() != -1 but we need the highest index.
+		ret := bytes.Compare(inodes[i].key(), key)
+		if ret == 0 {
+			exact = true
+		}
+		return ret != -1
+	})
+	if !exact && index > 0 {
+		index--
+	}
+	c.stack[len(c.stack)-1].index = index
+	c.search(key, inodes[index].pgid)
+}
+
+// Recursively search to the next page.
 func (c *Cursor) searchPage(key []byte, p *page) {
 	// Binary search for the correct range.
 	var inodes []branchPageElement
@@ -431,7 +465,12 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	} else {
 		inodes = p.branchPageElements()
 	}
+
 	pagePrefix := p.keyPrefix()
+	if !c.bucket.tx.db.KeysPrefixCompression {
+		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
+	}
+
 	keyPrefix := key
 	if len(key) > len(pagePrefix) {
 		keyPrefix = key[:len(pagePrefix)]
@@ -499,6 +538,9 @@ func (c *Cursor) nsearch(key []byte) {
 	p := c.bucket.lookupPage(e.pageID)
 	inodes := p.leafPageElements()
 	pagePrefix := p.keyPrefix()
+	if !c.bucket.tx.db.KeysPrefixCompression {
+		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
+	}
 	keyPrefix := key
 	if len(key) > len(pagePrefix) {
 		keyPrefix = key[:len(pagePrefix)]
@@ -540,7 +582,10 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 	// Or retrieve value from page.
 	p := c.bucket.lookupPage(ref.pageID)
 	elem := p.leafPageElement(uint16(ref.index))
-	return append(p.keyPrefix(), elem.key()...), elem.value(), elem.flags
+	if c.bucket.tx.db.KeysPrefixCompression {
+		return append(p.keyPrefix(), elem.key()...), elem.value(), elem.flags
+	}
+	return elem.key(), elem.value(), elem.flags
 }
 
 // node returns the node that the cursor is currently positioned on.

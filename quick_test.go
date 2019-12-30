@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"testing"
 	"testing/quick"
 	"time"
 )
@@ -22,6 +23,11 @@ import (
 //
 
 var qcount, qseed, qmaxitems, qmaxksize, qmaxvsize int
+
+var _ = func() bool {
+	testing.Init()
+	return true
+}()
 
 func init() {
 	flag.IntVar(&qcount, "quick.count", 5, "")

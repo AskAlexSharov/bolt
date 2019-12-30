@@ -49,7 +49,7 @@ func TestNode_read_LeafPage(t *testing.T) {
 	copy(data[7:], []byte("helloworldbye"))
 
 	// Deserialize page into a leaf.
-	n := &node{}
+	n := &node{inodes: make(inodes, 0), bucket: &Bucket{tx: &Tx{db: &DB{}, meta: &meta{pgid: 1}}}}
 	n.read(page)
 
 	// Check that there are two inodes with correct data.
@@ -81,7 +81,7 @@ func TestNode_write_LeafPage(t *testing.T) {
 	n.write(p)
 
 	// Read the page back in.
-	n2 := &node{}
+	n2 := &node{inodes: make(inodes, 0), bucket: &Bucket{tx: &Tx{db: &DB{}, meta: &meta{pgid: 2}}}}
 	n2.read(p)
 
 	// Check that the two pages are the same.

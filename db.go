@@ -94,6 +94,9 @@ type DB struct {
 	// of truncate() and fsync() when growing the data file.
 	AllocSize int
 
+	// Enables keys prefix compression feature
+	KeysPrefixCompression bool
+
 	path     string
 	file     *os.File
 	lockfile *os.File // windows only
@@ -160,6 +163,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 	db.NoGrowSync = options.NoGrowSync
 	db.MmapFlags = options.MmapFlags
+	db.KeysPrefixCompression = options.KeysPrefixCompression
 	db.memOnly = options.MemOnly
 
 	// Set default values for later DB operations.
@@ -989,6 +993,9 @@ type Options struct {
 
 	// Open database in memory-only mode.
 	MemOnly bool
+
+	// Enable keys prefix compression
+	KeysPrefixCompression bool
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().

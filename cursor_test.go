@@ -11,7 +11,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/boltdb/bolt"
+	"github.com/ledgerwatch/bolt"
 )
 
 // Ensure that a cursor can return a reference to the bucket that created it.
@@ -19,7 +19,7 @@ func TestCursor_Bucket(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -37,7 +37,7 @@ func TestCursor_Seek(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +51,7 @@ func TestCursor_Seek(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := b.CreateBucket([]byte("bkt")); err != nil {
+		if _, err := b.CreateBucket([]byte("bkt"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -111,7 +111,7 @@ func TestCursor_Delete(t *testing.T) {
 
 	// Insert every other key between 0 and $count.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +122,7 @@ func TestCursor_Delete(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := b.CreateBucket([]byte("sub")); err != nil {
+		if _, err := b.CreateBucket([]byte("sub"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -174,7 +174,7 @@ func TestCursor_Seek_Large(t *testing.T) {
 
 	// Insert every other key between 0 and $count.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -234,7 +234,7 @@ func TestCursor_EmptyBucket(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"), false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestCursor_EmptyBucketReverse(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"), false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -285,7 +285,7 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -356,7 +356,7 @@ func TestCursor_LeafRootReverse(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -420,7 +420,7 @@ func TestCursor_Restart(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -467,7 +467,7 @@ func TestCursor_First_EmptyPages(t *testing.T) {
 
 	// Create 1000 keys in the "widgets" bucket.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -518,7 +518,7 @@ func TestCursor_QuickCheck(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -576,7 +576,7 @@ func TestCursor_QuickCheck_Reverse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -628,17 +628,17 @@ func TestCursor_QuickCheck_BucketsOnly(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := b.CreateBucket([]byte("foo")); err != nil {
+		if _, err := b.CreateBucket([]byte("foo"), false); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := b.CreateBucket([]byte("bar")); err != nil {
+		if _, err := b.CreateBucket([]byte("bar"), false); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := b.CreateBucket([]byte("baz")); err != nil {
+		if _, err := b.CreateBucket([]byte("baz"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -670,17 +670,17 @@ func TestCursor_QuickCheck_BucketsOnly_Reverse(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"))
+		b, err := tx.CreateBucket([]byte("widgets"), false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := b.CreateBucket([]byte("foo")); err != nil {
+		if _, err := b.CreateBucket([]byte("foo"), false); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := b.CreateBucket([]byte("bar")); err != nil {
+		if _, err := b.CreateBucket([]byte("bar"), false); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := b.CreateBucket([]byte("baz")); err != nil {
+		if _, err := b.CreateBucket([]byte("baz"), false); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -717,7 +717,7 @@ func ExampleCursor() {
 	// Start a read-write transaction.
 	if err := db.Update(func(tx *bolt.Tx) error {
 		// Create a new bucket.
-		b, err := tx.CreateBucket([]byte("animals"))
+		b, err := tx.CreateBucket([]byte("animals"), false)
 		if err != nil {
 			return err
 		}
@@ -771,7 +771,7 @@ func ExampleCursor_reverse() {
 	// Start a read-write transaction.
 	if err := db.Update(func(tx *bolt.Tx) error {
 		// Create a new bucket.
-		b, err := tx.CreateBucket([]byte("animals"))
+		b, err := tx.CreateBucket([]byte("animals"), false)
 		if err != nil {
 			return err
 		}
