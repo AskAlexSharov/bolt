@@ -69,6 +69,19 @@ type DB struct {
 	// https://github.com/boltdb/bolt/issues/284
 	NoGrowSync bool
 
+	// Enables keys prefix compression feature
+	KeysPrefixCompression bool
+
+	// Read only mode.
+	// When true, Update() and Begin(true) return ErrDatabaseReadOnly immediately.
+	readOnly bool
+
+	// Memory only mode
+	// When true, never writes anything to disk
+	memOnly bool
+
+	opened bool
+
 	// If you want to read the entire database fast, you can set MmapFlag to
 	// syscall.MAP_POPULATE on Linux 2.6.23+ for sequential read-ahead.
 	MmapFlags int
@@ -94,9 +107,6 @@ type DB struct {
 	// of truncate() and fsync() when growing the data file.
 	AllocSize int
 
-	// Enables keys prefix compression feature
-	KeysPrefixCompression bool
-
 	path     string
 	file     *os.File
 	lockfile *os.File // windows only
@@ -107,7 +117,6 @@ type DB struct {
 	meta0    *meta
 	meta1    *meta
 	pageSize int
-	opened   bool
 	rwtx     *Tx
 	txs      []*Tx
 	freelist *freelist
@@ -126,14 +135,6 @@ type DB struct {
 	ops struct {
 		writeAt func(b []byte, off int64) (n int, err error)
 	}
-
-	// Read only mode.
-	// When true, Update() and Begin(true) return ErrDatabaseReadOnly immediately.
-	readOnly bool
-
-	// Memory only mode
-	// When true, never writes anything to disk
-	memOnly bool
 }
 
 // Path returns the path to currently open database file.
@@ -978,6 +979,12 @@ type Options struct {
 	// grab a shared lock (UNIX).
 	ReadOnly bool
 
+	// Open database in memory-only mode.
+	MemOnly bool
+
+	// Enable keys prefix compression
+	KeysPrefixCompression bool
+
 	// Sets the DB.MmapFlags flag before memory mapping the file.
 	MmapFlags int
 
@@ -990,12 +997,6 @@ type Options struct {
 	// If initialMmapSize is smaller than the previous database size,
 	// it takes no effect.
 	InitialMmapSize int
-
-	// Open database in memory-only mode.
-	MemOnly bool
-
-	// Enable keys prefix compression
-	KeysPrefixCompression bool
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().
