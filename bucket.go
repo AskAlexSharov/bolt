@@ -377,7 +377,7 @@ func (b *Bucket) MultiPut(pairs ...[]byte) error {
 				for _, ref := range c.stack[:len(c.stack)-1] {
 					_assert(!n.isLeaf, "expected branch node")
 					n.inodes[ref.index].size++
-					n = n.childAt(int(ref.index))
+					n = n.childAt(ref.index)
 				}
 			}
 		}
@@ -463,7 +463,7 @@ func (b *Bucket) Delete(key []byte) error {
 		for _, ref := range c.stack[:len(c.stack)-1] {
 			_assert(!n.isLeaf, "expected branch node")
 			n.inodes[ref.index].size--
-			n = n.childAt(int(ref.index))
+			n = n.childAt(ref.index)
 		}
 	}
 

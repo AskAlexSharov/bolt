@@ -356,7 +356,7 @@ func TestOpen_FileTooSmall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err = bolt.Open(path, 0666, nil)
+	_, err = bolt.Open(path, 0666, nil)
 	if err == nil || err.Error() != "file size too small" {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -404,9 +404,12 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 
 	done := make(chan struct{})
 
+	errs := make(chan error, 1) // use a channel to hand off the error
 	go func() {
+		defer close(errs)
 		if err := wtx.Commit(); err != nil {
-			t.Fatal(err)
+			errs <- err
+			return
 		}
 		done <- struct{}{}
 	}()
@@ -414,6 +417,8 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 	select {
 	case <-time.After(5 * time.Second):
 		t.Errorf("unexpected that the reader blocks writer")
+	case err := <-errs:
+		t.Fatal(err)
 	case <-done:
 	}
 
@@ -475,11 +480,14 @@ func testDB_Close_PendingTx(t *testing.T, writable bool) {
 		t.Fatal(err)
 	}
 
+	errs := make(chan error, 1) // use a channel to hand off the error
 	// Open update in separate goroutine.
 	done := make(chan struct{})
 	go func() {
+		defer close(errs)
 		if err := db.Close(); err != nil {
-			t.Fatal(err)
+			errs <- err
+			return
 		}
 		close(done)
 	}()
@@ -489,6 +497,8 @@ func testDB_Close_PendingTx(t *testing.T, writable bool) {
 	select {
 	case <-done:
 		t.Fatal("database closed too early")
+	case err := <-errs:
+		t.Fatal(err)
 	default:
 	}
 
@@ -1294,6 +1304,7 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 		start := make(chan struct{})
 		var wg sync.WaitGroup
 
+		errs := make(chan error, 10*10) // use a channel to hand off the error
 		for major := 0; major < 10; major++ {
 			wg.Add(1)
 			go func(id uint32) {
@@ -1304,7 +1315,7 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 					h := fnv.New32a()
 					buf := make([]byte, 4)
 					for minor := uint32(0); minor < 100; minor++ {
-						binary.LittleEndian.PutUint32(buf, uint32(id*100+minor))
+						binary.LittleEndian.PutUint32(buf, id*100+minor)
 						h.Reset()
 						_, _ = h.Write(buf[:])
 						k := h.Sum(nil)
@@ -1316,12 +1327,19 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 					return nil
 				}
 				if err := db.Update(insert100); err != nil {
-					b.Fatal(err)
+					errs <- err
+					return
 				}
 			}(uint32(major))
 		}
 		close(start)
 		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
 	}
 
 	b.StopTimer()

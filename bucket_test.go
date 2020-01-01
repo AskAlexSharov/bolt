@@ -111,8 +111,8 @@ func TestBucket_Get_Capacity(t *testing.T) {
 		}
 
 		// Ensure slice can be appended to without a segfault.
-		k = append(k, []byte("123")...)
-		v = append(v, []byte("123")...)
+		_ = append(k, []byte("123")...)
+		_ = append(v, []byte("123")...)
 
 		return nil
 	}); err != nil {
