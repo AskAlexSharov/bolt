@@ -51,6 +51,7 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 	var wg sync.WaitGroup
 	var threads = make(chan bool, parallelism)
 	var i int
+	errs := make(chan error, threadCount*10) // use a channel to hand off the error
 	for {
 		threads <- true
 		wg.Add(1)
@@ -71,7 +72,8 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 			// Start transaction.
 			tx, err := db.Begin(writable)
 			if err != nil {
-				t.Fatal("tx begin: ", err)
+				errs <- fmt.Errorf("tx begin: %w", err)
+				return
 			}
 
 			// Obtain current state of the dataset.
@@ -90,7 +92,8 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 					mutex.Unlock()
 
 					if err := tx.Commit(); err != nil {
-						t.Fatal(err)
+						errs <- fmt.Errorf("commit: %w", err)
+						return
 					}
 				}()
 			} else {
@@ -117,6 +120,13 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 
 	// Wait until all threads are done.
 	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 type simulateHandler func(tx *bolt.Tx, qdb *QuickDB)
