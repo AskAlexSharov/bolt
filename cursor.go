@@ -393,8 +393,8 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 			panic(fmt.Sprintf("invalid page type: %d: %x", p.id, p.flags))
 		}
 
-		e = elemRef{pageID: pgid, node: n}
-		c.stack = append(c.stack, e)
+		e = &elemRef{pageID: pgid, node: n}
+		c.stack = append(c.stack, *e)
 	}
 
 	// If we're on a leaf page/node then find the specific node.
