@@ -393,8 +393,8 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 			panic(fmt.Sprintf("invalid page type: %d: %x", p.id, p.flags))
 		}
 
-		e = &elemRef{pageID: pgid, node: n}
-		c.stack = append(c.stack, *e)
+		e = elemRef{pageID: pgid, node: n}
+		c.stack = append(c.stack, e)
 	}
 
 	// If we're on a leaf page/node then find the specific node.
@@ -413,8 +413,9 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 func (c *Cursor) searchNode(key []byte, n *node) {
 	offset := c.stack[len(c.stack)-1].index
 	count := len(n.inodes) - offset
-	index := offset + (count - 1) - sort.Search(count, func(i int) bool {
-		return bytes.Compare(n.inodes[offset+(count-1)-i].key, key) != 1
+	x := offset + (count - 1)
+	index := x - sort.Search(count, func(i int) bool {
+		return bytes.Compare(n.inodes[x-i].key, key) != 1
 	})
 	if index < offset {
 		index = offset
