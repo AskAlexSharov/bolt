@@ -68,6 +68,34 @@ func TestOpen(t *testing.T) {
 	}
 }
 
+// Regression validation for https://github.com/etcd-io/bbolt/pull/122.
+// Tests multiple goroutines simultaneously opening a database.
+func TestOpen_MultipleGoroutines(t *testing.T) {
+	const (
+		instances  = 30
+		iterations = 30
+	)
+	path := tempfile()
+	defer os.RemoveAll(path)
+	var wg sync.WaitGroup
+	for iteration := 0; iteration < iterations; iteration++ {
+		for instance := 0; instance < instances; instance++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				db, err := bolt.Open(path, 0600, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+		wg.Wait()
+	}
+}
+
 // Ensure that opening a database with a blank path returns an error.
 func TestOpen_ErrPathRequired(t *testing.T) {
 	_, err := bolt.Open("", 0666, nil)
@@ -428,6 +456,59 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 	}
 }
 
+// TestDB_Open_ReadOnly checks a database in read only mode can read but not write.
+func TestDB_Open_ReadOnly(t *testing.T) {
+	// Create a writable db, write k-v and close it.
+	db := MustOpenDB()
+	defer db.MustClose()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("foo"), []byte("bar")); err != nil {
+			t.Fatal(err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	o := &bolt.Options{ReadOnly: true}
+	readOnlyDB, err := bolt.Open(db.f, 0666, o)
+	if err != nil {
+		panic(err)
+	}
+
+	if !readOnlyDB.IsReadOnly() {
+		t.Fatal("expect db in read only mode")
+	}
+
+	// Read from a read-only transaction.
+	if err := readOnlyDB.View(func(tx *bolt.Tx) error {
+		value, _ := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+		if !bytes.Equal(value, []byte("bar")) {
+			t.Fatal("expect value 'bar', got", value)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Can't launch read-write transaction.
+	if _, err := readOnlyDB.Begin(true); err != bolt.ErrDatabaseReadOnly {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if err := readOnlyDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Ensure that a database cannot open a transaction when it's not open.
 func TestDB_Begin_ErrDatabaseNotOpen(t *testing.T) {
 	var db bolt.DB
@@ -476,7 +557,7 @@ func testDB_Close_PendingTx(t *testing.T, writable bool) {
 	defer db.MustClose()
 
 	// Start transaction.
-	tx, err := db.Begin(true)
+	tx, err := db.Begin(writable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -503,8 +584,13 @@ func testDB_Close_PendingTx(t *testing.T, writable bool) {
 	default:
 	}
 
-	// Commit transaction.
-	if err := tx.Commit(); err != nil {
+	// Commit/close transaction.
+	if writable {
+		err = tx.Commit()
+	} else {
+		err = tx.Rollback()
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -1385,15 +1471,31 @@ func validateBatchBench(b *testing.B, db *DB) {
 // DB is a test wrapper for bolt.DB.
 type DB struct {
 	*bolt.DB
+	f string
+	o *bolt.Options
 }
 
 // MustOpenDB returns a new, open DB at a temporary location.
 func MustOpenDB() *DB {
-	db, err := bolt.Open(tempfile(), 0666, nil)
+	return MustOpenWithOption(nil)
+}
+
+// MustOpenDBWithOption returns a new, open DB at a temporary location with given options.
+func MustOpenWithOption(o *bolt.Options) *DB {
+	f := tempfile()
+	if o == nil {
+		o = bolt.DefaultOptions
+	}
+
+	db, err := bolt.Open(f, 0666, o)
 	if err != nil {
 		panic(err)
 	}
-	return &DB{db}
+	return &DB{
+		DB: db,
+		f:  f,
+		o:  o,
+	}
 }
 
 // Close closes the database and deletes the underlying file.
@@ -1416,6 +1518,15 @@ func (db *DB) MustClose() {
 	if err := db.Close(); err != nil {
 		panic(err)
 	}
+}
+
+// MustReopen reopen the database. Panic on error.
+func (db *DB) MustReopen() {
+	indb, err := bolt.Open(db.f, 0666, db.o)
+	if err != nil {
+		panic(err)
+	}
+	db.DB = indb
 }
 
 // PrintStats prints the database stats
