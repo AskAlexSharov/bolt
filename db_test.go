@@ -255,11 +255,12 @@ func TestOpen_Size_Large(t *testing.T) {
 
 	// Insert until we get above the minimum 4MB size.
 	var index uint64
-	for i := 0; i < 10000; i++ {
-		if err := db.Update(func(tx *bolt.Tx) error {
+	var v = make([]byte, 1_000_000)
+	for i := 0; i < 100; i++ {
+		if err := db.Batch(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
-			for j := 0; j < 1000; j++ {
-				if err := b.Put(u64tob(index), make([]byte, 50)); err != nil {
+			for j := 0; j < 100; j++ {
+				if err := b.Put(u64tob(index), v); err != nil {
 					t.Fatal(err)
 				}
 				index++
