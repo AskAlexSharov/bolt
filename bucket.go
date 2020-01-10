@@ -750,7 +750,7 @@ func (b *Bucket) inlineable() bool {
 	var prefix []byte
 	for i, inode := range n.inodes {
 		size += leafPageElementSize + len(inode.key) + len(inode.value)
-		if b.tx.db.KeysPrefixCompression {
+		if !b.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
 				prefix = inode.key
 			} else {
