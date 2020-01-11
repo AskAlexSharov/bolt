@@ -220,20 +220,20 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 			}
 			pageid = p.id
 			if elem.isLeaf(c.bucket) {
-				if c.bucket.tx.db.KeysPrefixCompression {
-					lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
-				} else {
+				if c.bucket.tx.db.KeysPrefixCompressionDisable {
 					lastkey = p.leafPageElement(p.count - 1).key()
+				} else {
+					lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
 				}
 			} else {
 				if c.bucket.enum {
-					if c.bucket.tx.db.KeysPrefixCompression {
-						lastkey = append(p.keyPrefix(), p.branchPageElementX(p.count-1).key()...)
-					} else {
+					if c.bucket.tx.db.KeysPrefixCompressionDisable {
 						lastkey = p.branchPageElementX(p.count - 1).key()
+					} else {
+						lastkey = append(p.keyPrefix(), p.branchPageElementX(p.count-1).key()...)
 					}
 				} else {
-					if c.bucket.tx.db.KeysPrefixCompression {
+					if c.bucket.tx.db.KeysPrefixCompressionDisable {
 						lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
 					} else {
 						lastkey = p.branchPageElement(p.count - 1).key()
@@ -468,7 +468,7 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	}
 
 	pagePrefix := p.keyPrefix()
-	if !c.bucket.tx.db.KeysPrefixCompression {
+	if c.bucket.tx.db.KeysPrefixCompressionDisable {
 		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
@@ -539,7 +539,7 @@ func (c *Cursor) nsearch(key []byte) {
 	p := c.bucket.lookupPage(e.pageID)
 	inodes := p.leafPageElements()
 	pagePrefix := p.keyPrefix()
-	if !c.bucket.tx.db.KeysPrefixCompression {
+	if c.bucket.tx.db.KeysPrefixCompressionDisable {
 		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 	keyPrefix := key
@@ -583,7 +583,7 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 	// Or retrieve value from page.
 	p := c.bucket.lookupPage(ref.pageID)
 	elem := p.leafPageElement(uint16(ref.index))
-	if c.bucket.tx.db.KeysPrefixCompression {
+	if !c.bucket.tx.db.KeysPrefixCompressionDisable {
 		return append(p.keyPrefix(), elem.key()...), elem.value(), elem.flags
 	}
 	return elem.key(), elem.value(), elem.flags

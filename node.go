@@ -42,7 +42,7 @@ func (n *node) size() int {
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
-		if n.bucket.tx.db.KeysPrefixCompression {
+		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
 				prefix = item.key
 			} else {
@@ -70,7 +70,7 @@ func (n *node) sizeLessThan(v int) bool {
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
-		if n.bucket.tx.db.KeysPrefixCompression {
+		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
 				prefix = item.key
 			} else {
@@ -205,7 +205,7 @@ func (n *node) read(p *page) {
 	n.isLeaf = ((p.flags & leafPageFlag) != 0)
 	n.inodes = make(inodes, int(p.count))
 	prefix := p.keyPrefix()
-	if !n.bucket.tx.db.KeysPrefixCompression {
+	if n.bucket.tx.db.KeysPrefixCompressionDisable {
 		_assert(len(prefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 	minSize := p.minsize
@@ -216,29 +216,29 @@ func (n *node) read(p *page) {
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
 			inode.flags = elem.flags
-			if n.bucket.tx.db.KeysPrefixCompression {
-				inode.key = append(prefix, elem.key()...)
-			} else {
+			if n.bucket.tx.db.KeysPrefixCompressionDisable {
 				inode.key = elem.key()
+			} else {
+				inode.key = append(prefix, elem.key()...)
 			}
 			inode.value = elem.value()
 		} else {
 			if enum {
 				elem := p.branchPageElementX(uint16(i))
 				inode.pgid = elem.pgid
-				if n.bucket.tx.db.KeysPrefixCompression {
-					inode.key = append(prefix, elem.key()...)
-				} else {
+				if n.bucket.tx.db.KeysPrefixCompressionDisable {
 					inode.key = elem.key()
+				} else {
+					inode.key = append(prefix, elem.key()...)
 				}
 				inode.size = minSize + uint64(elem.size)
 			} else {
 				elem := p.branchPageElement(uint16(i))
 				inode.pgid = elem.pgid
-				if n.bucket.tx.db.KeysPrefixCompression {
-					inode.key = append(prefix, elem.key()...)
-				} else {
+				if n.bucket.tx.db.KeysPrefixCompressionDisable {
 					inode.key = elem.key()
+				} else {
+					inode.key = append(prefix, elem.key()...)
 				}
 			}
 		}
@@ -278,7 +278,7 @@ func (n *node) write(p *page) {
 	var minSize uint64 = 0
 	enum := n.bucket.enum
 	for _, item := range n.inodes {
-		if n.bucket.tx.db.KeysPrefixCompression {
+		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
 				prefix = item.key
 			} else {
@@ -300,13 +300,13 @@ func (n *node) write(p *page) {
 	plen := len(prefix)
 	p.prefixpos = uint32(n.pageElementSize() * len(n.inodes))
 	p.prefixsize = uint32(plen)
-	if !n.bucket.tx.db.KeysPrefixCompression {
+	if n.bucket.tx.db.KeysPrefixCompressionDisable {
 		_assert(plen == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
 	p.minsize = minSize
 	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
-	if n.bucket.tx.db.KeysPrefixCompression {
+	if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 		// Write prefix
 		if len(b) < plen {
 			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
@@ -447,7 +447,7 @@ func (n *node) splitIndex(threshold int) (index, sz int) {
 	for i := 0; i < len(n.inodes)-minKeysPerPage; i++ {
 		index = i
 		inode := n.inodes[i]
-		if n.bucket.tx.db.KeysPrefixCompression {
+		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
 				prefix = inode.key
 			} else {

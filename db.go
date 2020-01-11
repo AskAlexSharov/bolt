@@ -70,7 +70,7 @@ type DB struct {
 	NoGrowSync bool
 
 	// Enables keys prefix compression feature
-	KeysPrefixCompression bool
+	KeysPrefixCompressionDisable bool
 
 	// Read only mode.
 	// When true, Update() and Begin(true) return ErrDatabaseReadOnly immediately.
@@ -164,7 +164,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 	db.NoGrowSync = options.NoGrowSync
 	db.MmapFlags = options.MmapFlags
-	db.KeysPrefixCompression = options.KeysPrefixCompression
+	db.KeysPrefixCompressionDisable = options.KeysPrefixCompressionDisable
 	db.memOnly = options.MemOnly
 
 	// Set default values for later DB operations.
@@ -983,7 +983,7 @@ type Options struct {
 	MemOnly bool
 
 	// Enable keys prefix compression
-	KeysPrefixCompression bool
+	KeysPrefixCompressionDisable bool
 
 	// Sets the DB.MmapFlags flag before memory mapping the file.
 	MmapFlags int
