@@ -1044,7 +1044,7 @@ func (cmd *BenchCommand) runWritesWithSource(db *bolt.DB, options *BenchOptions,
 
 	for i := 0; i < options.Iterations; i += options.BatchSize {
 		if err := db.Update(func(tx *bolt.Tx) error {
-			b, _ := tx.CreateBucketIfNotExists(benchBucketName)
+			b, _ := tx.CreateBucketIfNotExists(benchBucketName, false)
 			b.FillPercent = options.FillPercent
 
 			for j := 0; j < options.BatchSize; j++ {
@@ -1073,7 +1073,7 @@ func (cmd *BenchCommand) runWritesNestedWithSource(db *bolt.DB, options *BenchOp
 
 	for i := 0; i < options.Iterations; i += options.BatchSize {
 		if err := db.Update(func(tx *bolt.Tx) error {
-			top, err := tx.CreateBucketIfNotExists(benchBucketName)
+			top, err := tx.CreateBucketIfNotExists(benchBucketName, false)
 			if err != nil {
 				return err
 			}
@@ -1084,7 +1084,7 @@ func (cmd *BenchCommand) runWritesNestedWithSource(db *bolt.DB, options *BenchOp
 			binary.BigEndian.PutUint32(name, keySource())
 
 			// Create bucket.
-			b, err := top.CreateBucketIfNotExists(name)
+			b, err := top.CreateBucketIfNotExists(name, false)
 			if err != nil {
 				return err
 			}
@@ -1646,7 +1646,7 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 		// Create bucket on the root transaction if this is the first level.
 		nk := len(keys)
 		if nk == 0 {
-			bkt, err := tx.CreateBucket(k)
+			bkt, err := tx.CreateBucket(k, false)
 			if err != nil {
 				return err
 			}
@@ -1666,7 +1666,7 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 
 		// If there is no value then this is a bucket call.
 		if v == nil {
-			bkt, err := b.CreateBucket(k)
+			bkt, err := b.CreateBucket(k, false)
 			if err != nil {
 				return err
 			}

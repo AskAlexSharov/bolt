@@ -81,7 +81,7 @@ func TestStatsCommand_Run(t *testing.T) {
 
 	if err := db.Update(func(tx *bolt.Tx) error {
 		// Create "foo" bucket.
-		b, err := tx.CreateBucket([]byte("foo"))
+		b, err := tx.CreateBucket([]byte("foo"), true)
 		if err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func TestStatsCommand_Run(t *testing.T) {
 		}
 
 		// Create "bar" bucket.
-		b, err = tx.CreateBucket([]byte("bar"))
+		b, err = tx.CreateBucket([]byte("bar"), true)
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func TestStatsCommand_Run(t *testing.T) {
 		}
 
 		// Create "baz" bucket.
-		b, err = tx.CreateBucket([]byte("baz"))
+		b, err = tx.CreateBucket([]byte("baz"), true)
 		if err != nil {
 			return err
 		}
@@ -205,7 +205,7 @@ func TestCompactCommand_Run(t *testing.T) {
 		n := 2 + rand.Intn(5)
 		for i := 0; i < n; i++ {
 			k := []byte(fmt.Sprintf("b%d", i))
-			b, err := tx.CreateBucketIfNotExists(k)
+			b, err := tx.CreateBucketIfNotExists(k, true)
 			if err != nil {
 				return err
 			}
@@ -224,7 +224,7 @@ func TestCompactCommand_Run(t *testing.T) {
 
 	// make the db grow by adding large values, and delete them.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte("large_vals"))
+		b, err := tx.CreateBucketIfNotExists([]byte("large_vals"), true)
 		if err != nil {
 			return err
 		}
@@ -309,7 +309,7 @@ func fillBucket(b *bolt.Bucket, prefix []byte) error {
 	n = 1 + rand.Intn(3)
 	for i := 0; i < n; i++ {
 		k := append(prefix, []byte(fmt.Sprintf("b%d", i))...)
-		sb, err := b.CreateBucket(k)
+		sb, err := b.CreateBucket(k, true)
 		if err != nil {
 			return err
 		}
