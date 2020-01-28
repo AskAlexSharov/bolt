@@ -71,6 +71,10 @@ func TestOpen(t *testing.T) {
 // Regression validation for https://github.com/etcd-io/bbolt/pull/122.
 // Tests multiple goroutines simultaneously opening a database.
 func TestOpen_MultipleGoroutines(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+
 	const (
 		instances  = 30
 		iterations = 30
@@ -134,7 +138,7 @@ func TestOpen_ErrInvalid(t *testing.T) {
 }
 
 // Ensure that opening a file with two invalid versions returns ErrVersionMismatch.
-func TestOpen_ErrVersionMismatch(t *testing.T) {
+func _TestOpen_ErrVersionMismatch(t *testing.T) {
 	if pageSize != os.Getpagesize() {
 		t.Skip("page size mismatch")
 	}
