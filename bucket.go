@@ -203,6 +203,10 @@ func (b *Bucket) CreateBucket(key []byte, enum bool) (*Bucket, error) {
 // Returns an error if the bucket name is blank, or if the bucket name is too long.
 // The bucket instance is only valid for the lifetime of the transaction.
 func (b *Bucket) CreateBucketIfNotExists(key []byte, enum bool) (*Bucket, error) {
+	child := b.Bucket(key)
+	if child != nil {
+		return child, nil
+	}
 	child, err := b.CreateBucket(key, enum)
 	if err == ErrBucketExists {
 		return b.Bucket(key), nil
