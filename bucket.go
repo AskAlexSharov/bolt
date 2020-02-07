@@ -551,7 +551,7 @@ func (b *Bucket) Stats() BucketStats {
 
 			if p.count != 0 {
 				// If page has any elements, add all element headers.
-				used += leafPageElementSize * int(p.count-1)
+				used += leafPageElementSize * uintptr(p.count-1)
 
 				// Add all element key, value sizes.
 				// The computation takes advantage of the fact that the position
@@ -559,16 +559,16 @@ func (b *Bucket) Stats() BucketStats {
 				// of all previous elements' keys and values.
 				// It also includes the last element's header.
 				lastElement := p.leafPageElement(p.count - 1)
-				used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
+				used += uintptr(lastElement.pos + lastElement.ksize + lastElement.vsize)
 			}
 
 			if b.root == 0 {
 				// For inlined bucket just update the inline stats
-				s.InlineBucketInuse += used
+				s.InlineBucketInuse += int(used)
 			} else {
 				// For non-inlined bucket update all the leaf stats
 				s.LeafPageN++
-				s.LeafInuse += used
+				s.LeafInuse += int(used)
 				s.LeafOverflowN += int(p.overflow)
 
 				// Collect stats from sub-buckets.
@@ -585,19 +585,17 @@ func (b *Bucket) Stats() BucketStats {
 			}
 		} else if (p.flags & branchPageFlag) != 0 {
 			s.BranchPageN++
-			var used int
-
 			lastElement := p.branchPageElement(p.count - 1)
 
 			// used totals the used bytes for the page
 			// Add header and all element headers.
-			used = pageHeaderSize + (branchPageElementSize * int(p.count-1))
+			used := pageHeaderSize + (branchPageElementSize * uintptr(p.count-1))
 
 			// Add size of all keys and values.
 			// Again, use the fact that last element's position equals to
 			// the total of key, value sizes of all previous elements.
-			used += int(lastElement.pos + lastElement.ksize)
-			s.BranchInuse += used
+			used += uintptr(lastElement.pos + lastElement.ksize)
+			s.BranchInuse += int(used)
 			s.BranchOverflowN += int(p.overflow)
 		}
 
@@ -738,7 +736,7 @@ func (b *Bucket) inlineable() bool {
 	var size = pageHeaderSize
 	var prefix []byte
 	for i, inode := range n.inodes {
-		size += leafPageElementSize + len(inode.key) + len(inode.value)
+		size += leafPageElementSize + uintptr(len(inode.key)) + uintptr(len(inode.value))
 		if !b.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
 				prefix = inode.key
@@ -755,7 +753,7 @@ func (b *Bucket) inlineable() bool {
 		}
 		if inode.flags&bucketLeafFlag != 0 {
 			return false
-		} else if size-len(prefix)*i > b.maxInlineBucketSize() {
+		} else if size-uintptr(len(prefix)*i) > b.maxInlineBucketSize() {
 			return false
 		}
 	}
@@ -764,8 +762,8 @@ func (b *Bucket) inlineable() bool {
 }
 
 // Returns the maximum total size of a bucket to make it a candidate for inlining.
-func (b *Bucket) maxInlineBucketSize() int {
-	return b.tx.db.pageSize / 4
+func (b *Bucket) maxInlineBucketSize() uintptr {
+	return uintptr(b.tx.db.pageSize / 4)
 }
 
 // write allocates and writes a bucket to a byte slice.

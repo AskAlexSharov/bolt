@@ -38,7 +38,7 @@ func (n *node) minKeys() int {
 
 // size returns the size of the node after serialization.
 func (n *node) size() int {
-	sz, elsz := pageHeaderSize, n.pageElementSize()
+	sz, elsz := int(pageHeaderSize), int(n.pageElementSize())
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
@@ -65,7 +65,7 @@ func (n *node) size() int {
 // sizeLessThan returns true if the node is less than a given size.
 // This is an optimization to avoid calculating a large node when we only need
 // to know if it fits inside a certain page size.
-func (n *node) sizeLessThan(v int) bool {
+func (n *node) sizeLessThan(v uintptr) bool {
 	sz, elsz := pageHeaderSize, n.pageElementSize()
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
@@ -84,8 +84,8 @@ func (n *node) sizeLessThan(v int) bool {
 				prefix = prefix[:j]
 			}
 		}
-		sz += elsz + len(item.key) + len(item.value)
-		if sz-len(prefix)*i >= v {
+		sz += elsz + uintptr(len(item.key)) + uintptr(len(item.value))
+		if sz-uintptr(len(prefix)*i) >= v {
 			return false
 		}
 	}
@@ -93,7 +93,7 @@ func (n *node) sizeLessThan(v int) bool {
 }
 
 // pageElementSize returns the size of each page element based on the type of node.
-func (n *node) pageElementSize() int {
+func (n *node) pageElementSize() uintptr {
 	if n.isLeaf {
 		return leafPageElementSize
 	}
@@ -253,7 +253,6 @@ func (n *node) write(p *page) {
 	if p.count == 0 {
 		return
 	}
-
 	// Calculate common prefix and minSize
 	var prefix []byte
 	var minSize uint64 = 0
@@ -274,14 +273,14 @@ func (n *node) write(p *page) {
 		}
 	}
 	plen := len(prefix)
-	p.prefixpos = uint32(n.pageElementSize() * len(n.inodes))
+	p.prefixpos = uint32(n.pageElementSize() * uintptr(len(n.inodes)))
 	p.prefixsize = uint32(plen)
 	if n.bucket.tx.db.KeysPrefixCompressionDisable {
 		_assert(plen == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
 	p.minsize = minSize
-	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
+	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*uintptr(len(n.inodes)):]
 	if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 		// Write prefix
 		if len(b) < plen {
@@ -331,7 +330,7 @@ func (n *node) write(p *page) {
 
 // split breaks up a node into multiple smaller nodes, if appropriate.
 // This should only be called from the spill() function.
-func (n *node) split(pageSize int) ([]*node, []uint64) {
+func (n *node) split(pageSize uintptr) ([]*node, []uint64) {
 	var nodes []*node
 	var sizes []uint64
 
@@ -356,7 +355,7 @@ func (n *node) split(pageSize int) ([]*node, []uint64) {
 
 // splitTwo breaks up a node into two smaller nodes, if appropriate.
 // This should only be called from the split() function.
-func (n *node) splitTwo(pageSize int) (*node, uint64, *node) {
+func (n *node) splitTwo(pageSize uintptr) (*node, uint64, *node) {
 	// Ignore the split if the page doesn't have at least enough nodes for
 	// two pages or if the nodes can fit in a single page.
 	if len(n.inodes) <= (minKeysPerPage*2) || n.sizeLessThan(pageSize) {
@@ -406,13 +405,13 @@ func (n *node) splitTwo(pageSize int) (*node, uint64, *node) {
 // splitIndex finds the position where a page will fill a given threshold.
 // It returns the index as well as the size of the first page.
 // This is only be called from split().
-func (n *node) splitIndex(threshold int) (index, sz int) {
+func (n *node) splitIndex(threshold int) (index, sz uintptr) {
 	sz = pageHeaderSize
 
 	var prefix []byte
 	// Loop until we only have the minimum number of keys required for the second page.
 	for i := 0; i < len(n.inodes)-minKeysPerPage; i++ {
-		index = i
+		index = uintptr(i)
 		inode := n.inodes[i]
 		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
@@ -428,11 +427,11 @@ func (n *node) splitIndex(threshold int) (index, sz int) {
 				prefix = prefix[:j]
 			}
 		}
-		elsize := n.pageElementSize() + len(inode.key) + len(inode.value)
+		elsize := n.pageElementSize() + uintptr(len(inode.key)) + uintptr(len(inode.value))
 
 		// If we have at least the minimum number of keys and adding another
 		// node would put us over the threshold then exit and return.
-		if i >= minKeysPerPage && sz+elsize-len(prefix)*i > threshold {
+		if index >= minKeysPerPage && sz+elsize-uintptr(len(prefix)*i) > uintptr(threshold) {
 			break
 		}
 
@@ -465,7 +464,7 @@ func (n *node) spill() error {
 	n.children = nil
 
 	// Split nodes into appropriate sizes. The first node will always be n.
-	var nodes, sizes = n.split(tx.db.pageSize)
+	var nodes, sizes = n.split(uintptr(tx.db.pageSize))
 	for i, node := range nodes {
 		// Add node's page to the freelist if it's not new.
 		if node.pgid > 0 {

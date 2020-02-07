@@ -29,7 +29,7 @@ func (f *freelist) size() int {
 		// The first element will be used to store the count. See freelist.write.
 		n++
 	}
-	return pageHeaderSize + (int(unsafe.Sizeof(pgid(0))) * n)
+	return int(pageHeaderSize) + (int(unsafe.Sizeof(pgid(0))) * n)
 }
 
 // count returns count of pages on the freelist
@@ -163,10 +163,12 @@ func (f *freelist) freed(pgid pgid) bool {
 func (f *freelist) read(p *page) {
 	// If the page.count is at the max uint16 value (64k) then it's considered
 	// an overflow and the size of the freelist is stored as the first element.
-	idx, count := 0, int(p.count)
+	var idx, count uintptr = 0, uintptr(p.count)
 	if count == 0xFFFF {
 		idx = 1
-		count = int(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[0])
+		count = uintptr(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[0])
+		fmt.Printf("AAAAAA: %d %d\n", count, uintptr(*(*pgid)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + unsafe.Sizeof(*p)))))
+
 	}
 
 	// Copy the list of page ids from the freelist.
@@ -174,6 +176,11 @@ func (f *freelist) read(p *page) {
 		f.ids = nil
 	} else {
 		ids := ((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[idx:count]
+		//ids := *(*[]pgid)(unsafe.Pointer(&reflect.SliceHeader{
+		//	Data: uintptr(unsafe.Pointer(p)) + unsafe.Sizeof(*p) + idx*unsafe.Sizeof(pgid(0)),
+		//	Len:  int(idx),
+		//	Cap:  int(count),
+		//}))
 		f.ids = make([]pgid, len(ids))
 		copy(f.ids, ids)
 
@@ -205,7 +212,7 @@ func (f *freelist) write(p *page) error {
 	} else {
 		p.count = 0xFFFF
 		((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[0] = pgid(lenids)
-		f.copyall(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[1:])
+		f.copyall(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[uintptr(1):])
 	}
 
 	return nil
