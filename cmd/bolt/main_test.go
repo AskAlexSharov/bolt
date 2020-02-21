@@ -164,7 +164,7 @@ func TestBucketsCommand_Run(t *testing.T) {
 	}
 	db.DB.Close()
 
-	expected := "bar\nbaz\nfoo\n"
+	expected := "bar 0.0M\nbaz 0.0M\nfoo 0.0M\n"
 
 	// Run the command.
 	m := NewMain()
