@@ -1107,8 +1107,8 @@ func (cmd *BucketsCommand) Run(args ...string) error {
 
 	// Print buckets.
 	return db.View(func(tx *bolt.Tx) error {
-		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
-			fmt.Fprintln(cmd.Stdout, string(name))
+		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
+			fmt.Fprintln(cmd.Stdout, string(name), fmt.Sprintf("%.1fM", float64(b.Stats().KeyN)/1_000_000))
 			return nil
 		})
 	})

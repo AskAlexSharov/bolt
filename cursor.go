@@ -18,6 +18,7 @@ import (
 type Cursor struct {
 	bucket *Bucket
 	stack  []elemRef
+	keyBuf []byte
 	idx    uint64
 }
 
@@ -223,20 +224,26 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 				if c.bucket.tx.db.KeysPrefixCompressionDisable {
 					lastkey = p.leafPageElement(p.count - 1).key()
 				} else {
-					lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
+					lastkey = lastkey[:0]
+					lastkey = append(lastkey, p.keyPrefix()...)
+					lastkey = append(lastkey, p.leafPageElement(p.count-1).key()...)
 				}
 			} else {
 				if c.bucket.enum {
 					if c.bucket.tx.db.KeysPrefixCompressionDisable {
 						lastkey = p.branchPageElementX(p.count - 1).key()
 					} else {
-						lastkey = append(p.keyPrefix(), p.branchPageElementX(p.count-1).key()...)
+						lastkey = lastkey[:0]
+						lastkey = append(lastkey, p.keyPrefix()...)
+						lastkey = append(lastkey, p.leafPageElement(p.count-1).key()...)
 					}
 				} else {
 					if c.bucket.tx.db.KeysPrefixCompressionDisable {
 						lastkey = p.branchPageElement(p.count - 1).key()
 					} else {
-						lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
+						lastkey = lastkey[:0]
+						lastkey = append(lastkey, p.keyPrefix()...)
+						lastkey = append(lastkey, p.leafPageElement(p.count-1).key()...)
 					}
 				}
 			}
@@ -585,7 +592,11 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 	p := c.bucket.lookupPage(ref.pageID)
 	elem := p.leafPageElement(uint16(ref.index))
 	if !c.bucket.tx.db.KeysPrefixCompressionDisable {
-		return append(p.keyPrefix(), elem.key()...), elem.value(), elem.flags
+		c.keyBuf = c.keyBuf[:0]
+		c.keyBuf = append(c.keyBuf, p.keyPrefix()...)
+		c.keyBuf = append(c.keyBuf, elem.key()...)
+		l := int(p.prefixsize) + len(elem.key())
+		return c.keyBuf[:l:l], elem.value(), elem.flags
 	}
 	return elem.key(), elem.value(), elem.flags
 }

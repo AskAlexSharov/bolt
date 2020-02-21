@@ -219,7 +219,9 @@ func (n *node) read(p *page) {
 			if n.bucket.tx.db.KeysPrefixCompressionDisable {
 				inode.key = elem.key()
 			} else {
-				inode.key = append(prefix, elem.key()...)
+				inode.key = inode.key[:0]
+				inode.key = append(inode.key, prefix...)
+				inode.key = append(inode.key, elem.key()...)
 			}
 			inode.value = elem.value()
 		} else {
@@ -229,7 +231,9 @@ func (n *node) read(p *page) {
 				if n.bucket.tx.db.KeysPrefixCompressionDisable {
 					inode.key = elem.key()
 				} else {
-					inode.key = append(prefix, elem.key()...)
+					inode.key = inode.key[:0]
+					inode.key = append(inode.key, prefix...)
+					inode.key = append(inode.key, elem.key()...)
 				}
 				inode.size = minSize + uint64(elem.size)
 			} else {
@@ -238,7 +242,9 @@ func (n *node) read(p *page) {
 				if n.bucket.tx.db.KeysPrefixCompressionDisable {
 					inode.key = elem.key()
 				} else {
-					inode.key = append(prefix, elem.key()...)
+					inode.key = inode.key[:0]
+					inode.key = append(inode.key, prefix...)
+					inode.key = append(inode.key, elem.key()...)
 				}
 			}
 		}

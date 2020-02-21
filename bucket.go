@@ -97,6 +97,7 @@ func (b *Bucket) Cursor() *Cursor {
 	return &Cursor{
 		bucket: b,
 		stack:  make([]elemRef, 0),
+		keyBuf: make([]byte, 32),
 	}
 }
 
