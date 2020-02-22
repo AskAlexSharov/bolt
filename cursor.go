@@ -234,9 +234,9 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 					}
 				} else {
 					if c.bucket.tx.db.KeysPrefixCompressionDisable {
-						lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
-					} else {
 						lastkey = p.branchPageElement(p.count - 1).key()
+					} else {
+						lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
 					}
 				}
 			}
