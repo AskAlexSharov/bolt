@@ -18,6 +18,7 @@ import (
 type Cursor struct {
 	bucket *Bucket
 	stack  []elemRef
+	keyBuf []byte
 	idx    uint64
 }
 
@@ -591,6 +592,12 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 	p := c.bucket.lookupPage(ref.pageID)
 	elem := p.leafPageElement(uint16(ref.index))
 	if !c.bucket.tx.db.KeysPrefixCompressionDisable {
+		prefix := p.keyPrefix()
+		k := elem.key()
+		c.keyBuf = append(c.keyBuf[:0], prefix...)
+		c.keyBuf = append(c.keyBuf, k...)
+		l := len(prefix) + len(k)
+		return c.keyBuf[:l:l], elem.value(), elem.flags
 		return append(p.keyPrefix(), elem.key()...), elem.value(), elem.flags
 	}
 	return elem.key(), elem.value(), elem.flags
