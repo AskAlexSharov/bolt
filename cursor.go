@@ -16,10 +16,11 @@ import (
 // and return unexpected keys and/or values. You must reposition your cursor
 // after mutating data.
 type Cursor struct {
-	bucket *Bucket
-	stack  []elemRef
-	keyBuf []byte
-	idx    uint64
+	bucket            *Bucket
+	stack             []elemRef
+	keyBuf            []byte
+	prefixCompression bool
+	idx               uint64
 }
 
 // Bucket returns the bucket that this cursor was created from.
@@ -221,29 +222,29 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 			}
 			pageid = p.id
 			if elem.isLeaf(c.bucket) {
-				if c.bucket.tx.db.KeysPrefixCompressionDisable {
-					lastkey = p.leafPageElement(p.count - 1).key()
-				} else {
+				if c.prefixCompression {
 					lastkey = lastkey[:0]
 					lastkey = append(lastkey, p.keyPrefix()...)
 					lastkey = append(lastkey, p.leafPageElement(p.count-1).key()...)
+				} else {
+					lastkey = p.leafPageElement(p.count - 1).key()
 				}
 			} else {
 				if c.bucket.enum {
-					if c.bucket.tx.db.KeysPrefixCompressionDisable {
-						lastkey = p.branchPageElementX(p.count - 1).key()
-					} else {
+					if c.prefixCompression {
 						lastkey = lastkey[:0]
 						lastkey = append(lastkey, p.keyPrefix()...)
 						lastkey = append(lastkey, p.branchPageElementX(p.count-1).key()...)
+					} else {
+						lastkey = p.branchPageElementX(p.count - 1).key()
 					}
 				} else {
-					if c.bucket.tx.db.KeysPrefixCompressionDisable {
-						lastkey = p.branchPageElement(p.count - 1).key()
-					} else {
+					if c.prefixCompression {
 						lastkey = lastkey[:0]
 						lastkey = append(lastkey, p.keyPrefix()...)
 						lastkey = append(lastkey, p.branchPageElement(p.count-1).key()...)
+					} else {
+						lastkey = p.branchPageElement(p.count - 1).key()
 					}
 				}
 			}
@@ -476,7 +477,7 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	}
 
 	pagePrefix := p.keyPrefix()
-	if c.bucket.tx.db.KeysPrefixCompressionDisable {
+	if !c.prefixCompression {
 		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
@@ -547,7 +548,7 @@ func (c *Cursor) nsearch(key []byte) {
 	p := c.bucket.lookupPage(e.pageID)
 	inodes := p.leafPageElements()
 	pagePrefix := p.keyPrefix()
-	if c.bucket.tx.db.KeysPrefixCompressionDisable {
+	if !c.prefixCompression {
 		_assert(len(pagePrefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 	keyPrefix := key
@@ -591,14 +592,13 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 	// Or retrieve value from page.
 	p := c.bucket.lookupPage(ref.pageID)
 	elem := p.leafPageElement(uint16(ref.index))
-	if !c.bucket.tx.db.KeysPrefixCompressionDisable {
+	if c.prefixCompression {
 		prefix := p.keyPrefix()
 		k := elem.key()
 		c.keyBuf = append(c.keyBuf[:0], prefix...)
 		c.keyBuf = append(c.keyBuf, k...)
 		l := len(prefix) + len(k)
 		return c.keyBuf[:l:l], elem.value(), elem.flags
-		return append(p.keyPrefix(), elem.key()...), elem.value(), elem.flags
 	}
 	return elem.key(), elem.value(), elem.flags
 }

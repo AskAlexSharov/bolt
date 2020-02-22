@@ -95,9 +95,10 @@ func (b *Bucket) Cursor() *Cursor {
 
 	// Allocate and return a cursor.
 	return &Cursor{
-		bucket: b,
-		stack:  make([]elemRef, 0),
-		keyBuf: make([]byte, 32),
+		bucket:            b,
+		stack:             make([]elemRef, 0),
+		keyBuf:            make([]byte, 32),
+		prefixCompression: !b.tx.db.KeysPrefixCompressionDisable,
 	}
 }
 
@@ -756,9 +757,10 @@ func (b *Bucket) inlineable() bool {
 	// our threshold for inline bucket size.
 	var size = pageHeaderSize
 	var prefix []byte
+	var prefixCompression = !b.tx.db.KeysPrefixCompressionDisable
 	for i, inode := range n.inodes {
 		size += leafPageElementSize + uintptr(len(inode.key)) + uintptr(len(inode.value))
-		if !b.tx.db.KeysPrefixCompressionDisable {
+		if prefixCompression {
 			if prefix == nil {
 				prefix = inode.key
 			} else {
