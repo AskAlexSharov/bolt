@@ -92,7 +92,6 @@ func (b *Bucket) Writable() bool {
 func (b *Bucket) Cursor() *Cursor {
 	// Update transaction statistics.
 	b.tx.stats.CursorCount++
-
 	// Allocate and return a cursor.
 	return &Cursor{
 		bucket:            b,
