@@ -10,8 +10,6 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
-        with:
-          path: src/github.com/${{ github.repository }}
 
       - uses: actions/setup-go@v2-beta
         with:
@@ -20,12 +18,10 @@ jobs:
 
       - name: Build
         run: |
-          cd src/github.com/${{ github.repository }}
           ls
           go build -i -v .
 
       - name: Test
         run: |
-          cd src/github.com/${{ github.repository }}
           ls
           go test -v -short .
