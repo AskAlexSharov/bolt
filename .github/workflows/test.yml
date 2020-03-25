@@ -25,6 +25,10 @@ jobs:
           fetch-depth: 1
           path: src/github.com/${{ github.repository }}
 
+      - run: go env
+
+      - run: pwd
+
       - name: Build
         run: go build -i -v .
 
