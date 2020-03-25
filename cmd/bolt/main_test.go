@@ -81,7 +81,7 @@ func _TestStatsCommand_Run(t *testing.T) {
 
 	if err := db.Update(func(tx *bolt.Tx) error {
 		// Create "foo" bucket.
-		b, err := tx.CreateBucket([]byte("foo"), false)
+		b, err := tx.CreateBucket([]byte("foo"))
 		if err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func _TestStatsCommand_Run(t *testing.T) {
 		}
 
 		// Create "bar" bucket.
-		b, err = tx.CreateBucket([]byte("bar"), false)
+		b, err = tx.CreateBucket([]byte("bar"))
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func _TestStatsCommand_Run(t *testing.T) {
 		}
 
 		// Create "baz" bucket.
-		b, err = tx.CreateBucket([]byte("baz"), false)
+		b, err = tx.CreateBucket([]byte("baz"))
 		if err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ func TestBucketsCommand_Run(t *testing.T) {
 
 	if err := db.Update(func(tx *bolt.Tx) error {
 		for _, name := range []string{"foo", "bar", "baz"} {
-			_, err := tx.CreateBucket([]byte(name), false)
+			_, err := tx.CreateBucket([]byte(name))
 			if err != nil {
 				return err
 			}
@@ -182,7 +182,7 @@ func TestKeysCommand_Run(t *testing.T) {
 
 	if err := db.Update(func(tx *bolt.Tx) error {
 		for _, name := range []string{"foo", "bar"} {
-			b, err := tx.CreateBucket([]byte(name), false)
+			b, err := tx.CreateBucket([]byte(name))
 			if err != nil {
 				return err
 			}
@@ -217,7 +217,7 @@ func TestGetCommand_Run(t *testing.T) {
 
 	if err := db.Update(func(tx *bolt.Tx) error {
 		for _, name := range []string{"foo", "bar"} {
-			b, err := tx.CreateBucket([]byte(name), false)
+			b, err := tx.CreateBucket([]byte(name))
 			if err != nil {
 				return err
 			}
@@ -305,7 +305,7 @@ func TestCompactCommand_Run(t *testing.T) {
 		n := 2 + rand.Intn(5)
 		for i := 0; i < n; i++ {
 			k := []byte(fmt.Sprintf("b%d", i))
-			b, err := tx.CreateBucketIfNotExists(k, false)
+			b, err := tx.CreateBucketIfNotExists(k)
 			if err != nil {
 				return err
 			}
@@ -324,7 +324,7 @@ func TestCompactCommand_Run(t *testing.T) {
 
 	// make the db grow by adding large values, and delete them.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte("large_vals"), false)
+		b, err := tx.CreateBucketIfNotExists([]byte("large_vals"))
 		if err != nil {
 			return err
 		}
@@ -409,7 +409,7 @@ func fillBucket(b *bolt.Bucket, prefix []byte) error {
 	n = 1 + rand.Intn(3)
 	for i := 0; i < n; i++ {
 		k := append(prefix, []byte(fmt.Sprintf("b%d", i))...)
-		sb, err := b.CreateBucket(k, false)
+		sb, err := b.CreateBucket(k)
 		if err != nil {
 			return err
 		}
