@@ -174,7 +174,7 @@ func simulatePutHandler(tx *bolt.Tx, qdb *QuickDB) {
 	// Retrieve root bucket.
 	b := tx.Bucket(keys[0])
 	if b == nil {
-		b, err = tx.CreateBucket(keys[0], false)
+		b, err = tx.CreateBucket(keys[0])
 		if err != nil {
 			panic("create bucket: " + err.Error())
 		}
@@ -186,7 +186,7 @@ func simulatePutHandler(tx *bolt.Tx, qdb *QuickDB) {
 		if child != nil {
 			b = child
 		} else {
-			b, err = b.CreateBucket(key, false)
+			b, err = b.CreateBucket(key)
 			if err != nil {
 				panic("create bucket: " + err.Error())
 			}

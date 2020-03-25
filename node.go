@@ -97,11 +97,7 @@ func (n *node) pageElementSize() int {
 	if n.isLeaf {
 		return leafPageElementSize
 	}
-	if n.bucket.enum {
-		return branchPageElementSizeX
-	} else {
-		return branchPageElementSize
-	}
+	return branchPageElementSize
 }
 
 // childAt returns the child node at a given index.
@@ -173,9 +169,6 @@ func (n *node) put(oldKey, newKey, value []byte, pgid pgid, flags uint32, size u
 	inode.key = newKey
 	inode.value = value
 	inode.pgid = pgid
-	if n.bucket.enum && !n.isLeaf {
-		inode.size = size
-	}
 	_assert(len(inode.key) > 0, "put: zero-length inode key")
 	return !exact
 }
@@ -208,8 +201,6 @@ func (n *node) read(p *page) {
 	if n.bucket.tx.db.KeysPrefixCompressionDisable {
 		_assert(len(prefix) == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
-	minSize := p.minsize
-	enum := n.bucket != nil && n.bucket.enum
 
 	for i := 0; i < int(p.count); i++ {
 		inode := &n.inodes[i]
@@ -223,23 +214,13 @@ func (n *node) read(p *page) {
 			}
 			inode.value = elem.value()
 		} else {
-			if enum {
-				elem := p.branchPageElementX(uint16(i))
-				inode.pgid = elem.pgid
-				if n.bucket.tx.db.KeysPrefixCompressionDisable {
-					inode.key = elem.key()
-				} else {
-					inode.key = append(prefix, elem.key()...)
-				}
-				inode.size = minSize + uint64(elem.size)
+
+			elem := p.branchPageElement(uint16(i))
+			inode.pgid = elem.pgid
+			if n.bucket.tx.db.KeysPrefixCompressionDisable {
+				inode.key = elem.key()
 			} else {
-				elem := p.branchPageElement(uint16(i))
-				inode.pgid = elem.pgid
-				if n.bucket.tx.db.KeysPrefixCompressionDisable {
-					inode.key = elem.key()
-				} else {
-					inode.key = append(prefix, elem.key()...)
-				}
+				inode.key = append(prefix, elem.key()...)
 			}
 		}
 		_assert(len(inode.key) > 0, "read: zero-length inode key")
@@ -276,7 +257,6 @@ func (n *node) write(p *page) {
 	// Calculate common prefix and minSize
 	var prefix []byte
 	var minSize uint64 = 0
-	enum := n.bucket.enum
 	for _, item := range n.inodes {
 		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
@@ -291,10 +271,6 @@ func (n *node) write(p *page) {
 				}
 				prefix = prefix[:j]
 			}
-		}
-
-		if enum && (minSize == 0 || item.size < minSize) {
-			minSize = item.size
 		}
 	}
 	plen := len(prefix)
@@ -327,20 +303,11 @@ func (n *node) write(p *page) {
 			elem.ksize = uint32(len(item.key) - plen)
 			elem.vsize = uint32(len(item.value))
 		} else {
-			if enum {
-				elem := p.branchPageElementX(uint16(i))
-				elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
-				elem.ksize = uint32(len(item.key) - plen)
-				elem.pgid = item.pgid
-				elem.size = uint32(item.size - minSize)
-				_assert(elem.pgid != p.id, "write: circular dependency occurred")
-			} else {
-				elem := p.branchPageElement(uint16(i))
-				elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
-				elem.ksize = uint32(len(item.key) - plen)
-				elem.pgid = item.pgid
-				_assert(elem.pgid != p.id, "write: circular dependency occurred")
-			}
+			elem := p.branchPageElement(uint16(i))
+			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
+			elem.ksize = uint32(len(item.key) - plen)
+			elem.pgid = item.pgid
+			_assert(elem.pgid != p.id, "write: circular dependency occurred")
 		}
 
 		// If the length of key+value is larger than the max allocation size
@@ -735,9 +702,11 @@ func (n *node) dump() {
 
 type nodes []*node
 
-func (s nodes) Len() int           { return len(s) }
-func (s nodes) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s nodes) Less(i, j int) bool { return bytes.Compare(s[i].inodes[0].key, s[j].inodes[0].key) == -1 }
+func (s nodes) Len() int      { return len(s) }
+func (s nodes) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s nodes) Less(i, j int) bool {
+	return bytes.Compare(s[i].inodes[0].key, s[j].inodes[0].key) == -1
+}
 
 // inode represents an internal node inside of a node.
 // It can be used to point to elements in a page or point

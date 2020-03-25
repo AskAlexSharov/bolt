@@ -47,8 +47,6 @@ type Bucket struct {
 	//
 	// This is non-persisted across transactions so it must be set in every Tx.
 	FillPercent float64
-
-	enum bool // whether the bucket needs to support enumeration of leaves
 }
 
 // bucket represents the on-file representation of a bucket.
@@ -58,7 +56,6 @@ type Bucket struct {
 type bucket struct {
 	root     pgid   // page id of the bucket's root-level page
 	sequence uint64 // monotonically incrementing, used by NextSequence()
-	enum     bool   // whether the bucket needs to support enumeration of leaves
 }
 
 // newBucket returns a new bucket associated with a transaction.
@@ -158,7 +155,7 @@ func (b *Bucket) openBucket(value []byte) *Bucket {
 // CreateBucket creates a new bucket at the given key and returns the new bucket.
 // Returns an error if the key already exists, if the bucket name is blank, or if the bucket name is too long.
 // The bucket instance is only valid for the lifetime of the transaction.
-func (b *Bucket) CreateBucket(key []byte, enum bool) (*Bucket, error) {
+func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	if b.tx.db == nil {
 		return nil, ErrTxClosed
 	} else if !b.tx.writable {
@@ -181,7 +178,7 @@ func (b *Bucket) CreateBucket(key []byte, enum bool) (*Bucket, error) {
 
 	// Create empty, inline bucket.
 	var bucket = Bucket{
-		bucket:      &bucket{enum: enum},
+		bucket:      &bucket{},
 		rootNode:    &node{isLeaf: true},
 		FillPercent: DefaultFillPercent,
 	}
@@ -202,12 +199,12 @@ func (b *Bucket) CreateBucket(key []byte, enum bool) (*Bucket, error) {
 // CreateBucketIfNotExists creates a new bucket if it doesn't already exist and returns a reference to it.
 // Returns an error if the bucket name is blank, or if the bucket name is too long.
 // The bucket instance is only valid for the lifetime of the transaction.
-func (b *Bucket) CreateBucketIfNotExists(key []byte, enum bool) (*Bucket, error) {
+func (b *Bucket) CreateBucketIfNotExists(key []byte) (*Bucket, error) {
 	child := b.Bucket(key)
 	if child != nil {
 		return child, nil
 	}
-	child, err := b.CreateBucket(key, enum)
+	child, err := b.CreateBucket(key)
 	if err == ErrBucketExists {
 		return b.Bucket(key), nil
 	} else if err != nil {
@@ -589,29 +586,17 @@ func (b *Bucket) Stats() BucketStats {
 		} else if (p.flags & branchPageFlag) != 0 {
 			s.BranchPageN++
 			var used int
-			if b.enum {
-				lastElement := p.branchPageElementX(p.count - 1)
 
-				// used totals the used bytes for the page
-				// Add header and all element headers.
-				used = pageHeaderSize + (branchPageElementSizeX * int(p.count-1))
+			lastElement := p.branchPageElement(p.count - 1)
 
-				// Add size of all keys and values.
-				// Again, use the fact that last element's position equals to
-				// the total of key, value sizes of all previous elements.
-				used += int(lastElement.pos + lastElement.ksize)
-			} else {
-				lastElement := p.branchPageElement(p.count - 1)
+			// used totals the used bytes for the page
+			// Add header and all element headers.
+			used = pageHeaderSize + (branchPageElementSize * int(p.count-1))
 
-				// used totals the used bytes for the page
-				// Add header and all element headers.
-				used = pageHeaderSize + (branchPageElementSize * int(p.count-1))
-
-				// Add size of all keys and values.
-				// Again, use the fact that last element's position equals to
-				// the total of key, value sizes of all previous elements.
-				used += int(lastElement.pos + lastElement.ksize)
-			}
+			// Add size of all keys and values.
+			// Again, use the fact that last element's position equals to
+			// the total of key, value sizes of all previous elements.
+			used += int(lastElement.pos + lastElement.ksize)
 			s.BranchInuse += used
 			s.BranchOverflowN += int(p.overflow)
 		}
@@ -666,13 +651,8 @@ func (b *Bucket) _forEachPageNode(pgid pgid, depth int, fn func(*page, *node, in
 	if p != nil {
 		if (p.flags & branchPageFlag) != 0 {
 			for i := 0; i < int(p.count); i++ {
-				if b.enum {
-					elem := p.branchPageElementX(uint16(i))
-					b._forEachPageNode(elem.pgid, depth+1, fn)
-				} else {
-					elem := p.branchPageElement(uint16(i))
-					b._forEachPageNode(elem.pgid, depth+1, fn)
-				}
+				elem := p.branchPageElement(uint16(i))
+				b._forEachPageNode(elem.pgid, depth+1, fn)
 			}
 		}
 	} else {
