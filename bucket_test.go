@@ -1937,4 +1937,5 @@ func ExampleBucket_ForEach() {
 	// A cat is lame.
 	// A dog is fun.
 	// A liger is awesome.
+
 }
