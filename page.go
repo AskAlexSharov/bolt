@@ -12,7 +12,6 @@ const pageHeaderSize = int(unsafe.Offsetof(((*page)(nil)).ptr))
 const minKeysPerPage = 2
 
 const branchPageElementSize = int(unsafe.Sizeof(branchPageElement{}))
-const branchPageElementSizeX = int(unsafe.Sizeof(branchPageElementX{}))
 const leafPageElementSize = int(unsafe.Sizeof(leafPageElement{}))
 
 const (
@@ -77,25 +76,12 @@ func (p *page) branchPageElement(index uint16) *branchPageElement {
 	return &((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[index]
 }
 
-// branchPageElementX retrieves the extended branch node by index
-func (p *page) branchPageElementX(index uint16) *branchPageElementX {
-	return &((*[0x7FFFFFF]branchPageElementX)(unsafe.Pointer(&p.ptr)))[index]
-}
-
 // branchPageElements retrieves a list of branch nodes.
 func (p *page) branchPageElements() []branchPageElement {
 	if p.count == 0 {
 		return nil
 	}
 	return ((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[:]
-}
-
-// branchPageElements retrieves a list of branch nodes.
-func (p *page) branchPageElementsX() []branchPageElementX {
-	if p.count == 0 {
-		return nil
-	}
-	return ((*[0x7FFFFFF]branchPageElementX)(unsafe.Pointer(&p.ptr)))[:]
 }
 
 func (p *page) keyPrefix() []byte {
@@ -122,22 +108,8 @@ type branchPageElement struct {
 	pgid  pgid
 }
 
-// branchPageElement represents a node on a branch page.
-type branchPageElementX struct {
-	pos   uint32
-	ksize uint32
-	pgid  pgid
-	size  uint32
-}
-
 // key returns a byte slice of the node key.
 func (n *branchPageElement) key() []byte {
-	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
-	return (*[maxAllocSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize]
-}
-
-// key returns a byte slice of the node key.
-func (n *branchPageElementX) key() []byte {
 	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
 	return (*[maxAllocSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize]
 }

@@ -232,7 +232,7 @@ func TestOpen_Size(t *testing.T) {
 
 	// Insert until we get above the minimum 4MB size.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
+		b, _ := tx.CreateBucketIfNotExists([]byte("data"))
 		for i := 0; i < 10000; i++ {
 			if err := b.Put([]byte(fmt.Sprintf("%04d", i)), make([]byte, 1000)); err != nil {
 				t.Fatal(err)
@@ -299,7 +299,7 @@ func TestOpen_Size_Large(t *testing.T) {
 	var v = make([]byte, 1_000_000)
 	for i := 0; i < 100; i++ {
 		if err := db.Batch(func(tx *bolt.Tx) error {
-			b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
+			b, _ := tx.CreateBucketIfNotExists([]byte("data"))
 			for j := 0; j < 100; j++ {
 				if err := b.Put(u64tob(index), v); err != nil {
 					t.Fatal(err)
@@ -433,7 +433,7 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b, err := wtx.CreateBucket([]byte("test"), false)
+	b, err := wtx.CreateBucket([]byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,7 +476,7 @@ func TestDB_Open_ReadOnly(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"), false)
+		b, err := tx.CreateBucket([]byte("widgets"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -621,7 +621,7 @@ func TestDB_Update(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"), false)
+		b, err := tx.CreateBucket([]byte("widgets"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -656,7 +656,7 @@ func TestDB_Update(t *testing.T) {
 func TestDB_Update_Closed(t *testing.T) {
 	var db bolt.DB
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -783,7 +783,7 @@ func TestDB_Update_Panic(t *testing.T) {
 		}()
 
 		if err := db.Update(func(tx *bolt.Tx) error {
-			if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
+			if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
 				t.Fatal(err)
 			}
 			panic("omg")
@@ -794,7 +794,7 @@ func TestDB_Update_Panic(t *testing.T) {
 
 	// Verify we can update again.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -831,7 +831,7 @@ func TestDB_View_Panic(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -873,7 +873,7 @@ func TestDB_Stats(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"), false)
+		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -894,7 +894,7 @@ func TestDB_Consistency(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"), false)
+		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -981,7 +981,7 @@ func TestDB_Batch(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
+		if _, err := tx.CreateBucket([]byte("widgets")); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -1056,7 +1056,7 @@ func TestDB_BatchFull(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"), false)
+		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -1115,7 +1115,7 @@ func TestDB_BatchTime(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"), false)
+		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -1168,7 +1168,7 @@ func ExampleDB_Update() {
 
 	// Execute several commands within a read-write transaction.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"), false)
+		b, err := tx.CreateBucket([]byte("widgets"))
 		if err != nil {
 			return err
 		}
@@ -1208,7 +1208,7 @@ func ExampleDB_View() {
 
 	// Insert data into a bucket.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("people"), false)
+		b, err := tx.CreateBucket([]byte("people"))
 		if err != nil {
 			return err
 		}
@@ -1251,7 +1251,7 @@ func ExampleDB_Begin_ReadOnly() {
 
 	// Create a bucket using a read-write transaction.
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("widgets"), false)
+		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	}); err != nil {
 		log.Fatal(err)
@@ -1304,7 +1304,7 @@ func BenchmarkDBBatchAutomatic(b *testing.B) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("bench"), false)
+		_, err := tx.CreateBucket([]byte("bench"))
 		return err
 	}); err != nil {
 		b.Fatal(err)
@@ -1349,7 +1349,7 @@ func BenchmarkDBBatchSingle(b *testing.B) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("bench"), false)
+		_, err := tx.CreateBucket([]byte("bench"))
 		return err
 	}); err != nil {
 		b.Fatal(err)
@@ -1393,7 +1393,7 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 	db := MustOpenDB()
 	defer db.MustClose()
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("bench"), false)
+		_, err := tx.CreateBucket([]byte("bench"))
 		return err
 	}); err != nil {
 		b.Fatal(err)

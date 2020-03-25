@@ -60,15 +60,6 @@ func (c *Cursor) Last() (key []byte, value []byte) {
 	n := c.bucket.lookupNode(c.bucket.root)
 	ref := elemRef{pageID: c.bucket.root, node: n}
 	ref.index = ref.count(c.bucket) - 1
-	if c.bucket.enum {
-		var idx uint64
-		e := elemRef{pageID: c.bucket.root, node: n}
-		for i, cnt := 0, ref.count(c.bucket); i < cnt; i++ {
-			e.index = i
-			idx += e.size(c)
-		}
-		c.idx = idx - 1
-	}
 	c.stack = append(c.stack, ref)
 	c.last()
 	k, v, flags := c.keyValue()
@@ -226,33 +217,15 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 					lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
 				}
 			} else {
-				if c.bucket.enum {
-					if c.bucket.tx.db.KeysPrefixCompressionDisable {
-						lastkey = p.branchPageElementX(p.count - 1).key()
-					} else {
-						lastkey = append(p.keyPrefix(), p.branchPageElementX(p.count-1).key()...)
-					}
+				if c.bucket.tx.db.KeysPrefixCompressionDisable {
+					lastkey = p.branchPageElement(p.count - 1).key()
 				} else {
-					if c.bucket.tx.db.KeysPrefixCompressionDisable {
-						lastkey = p.branchPageElement(p.count - 1).key()
-					} else {
-						lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
-					}
+					lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
 				}
 			}
 		}
 		if bytes.Compare(seek, lastkey) <= 0 {
 			break
-		} else {
-			if c.bucket.enum {
-				var idx uint64
-				e := elemRef{node: elem.node, pageID: elem.pageID}
-				for i, cnt := elem.index, e.count(c.bucket); i < cnt; i++ {
-					e.index = i
-					idx += e.size(c)
-				}
-				c.idx += idx
-			}
 		}
 	}
 
@@ -293,11 +266,7 @@ func (c *Cursor) first() {
 			pgid = ref.node.inodes[ref.index].pgid
 		} else {
 			p := c.bucket.lookupPage(ref.pageID)
-			if c.bucket.enum {
-				pgid = p.branchPageElementX(uint16(ref.index)).pgid
-			} else {
-				pgid = p.branchPageElement(uint16(ref.index)).pgid
-			}
+			pgid = p.branchPageElement(uint16(ref.index)).pgid
 		}
 		n := c.bucket.lookupNode(pgid)
 		c.stack = append(c.stack, elemRef{pageID: pgid, node: n, index: 0})
@@ -319,11 +288,7 @@ func (c *Cursor) last() {
 			pgid = ref.node.inodes[ref.index].pgid
 		} else {
 			p := c.bucket.lookupPage(ref.pageID)
-			if c.bucket.enum {
-				pgid = p.branchPageElementX(uint16(ref.index)).pgid
-			} else {
-				pgid = p.branchPageElement(uint16(ref.index)).pgid
-			}
+			pgid = p.branchPageElement(uint16(ref.index)).pgid
 		}
 		n := c.bucket.lookupNode(pgid)
 
@@ -420,15 +385,6 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 	if index < offset {
 		index = offset
 	}
-	if c.bucket.enum {
-		var idx uint64
-		e := elemRef{node: n}
-		for i, cnt := offset, index; i < cnt; i++ {
-			e.index = i
-			idx += e.size(c)
-		}
-		c.idx += idx
-	}
 	c.stack[len(c.stack)-1].index = index
 
 	// Recursively search to the next page.
@@ -460,12 +416,7 @@ func (c *Cursor) searchPage2(key []byte, p *page) {
 func (c *Cursor) searchPage(key []byte, p *page) {
 	// Binary search for the correct range.
 	var inodes []branchPageElement
-	var inodesX []branchPageElementX
-	if c.bucket.enum {
-		inodesX = p.branchPageElementsX()
-	} else {
-		inodes = p.branchPageElements()
-	}
+	inodes = p.branchPageElements()
 
 	pagePrefix := p.keyPrefix()
 	if c.bucket.tx.db.KeysPrefixCompressionDisable {
@@ -487,33 +438,17 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	case 0:
 		shortKey := key[len(pagePrefix):]
 		index = offset + (count - 1) - sort.Search(count, func(i int) bool {
-			if c.bucket.enum {
-				return bytes.Compare(inodesX[offset+(count-1)-i].key(), shortKey) != 1
-			} else {
-				return bytes.Compare(inodes[offset+(count-1)-i].key(), shortKey) != 1
-			}
+			return bytes.Compare(inodes[offset+(count-1)-i].key(), shortKey) != 1
 		})
 	}
 	if index < offset {
 		index = offset
 	}
-	if c.bucket.enum {
-		var idx uint64
-		e := elemRef{pageID: p.id}
-		for i, cnt := offset, index; i < cnt; i++ {
-			e.index = i
-			idx += e.size(c)
-		}
-		c.idx += idx
-	}
+
 	c.stack[len(c.stack)-1].index = index
 
 	// Recursively search to the next page.
-	if c.bucket.enum {
-		c.search(key, inodesX[index].pgid)
-	} else {
-		c.search(key, inodes[index].pgid)
-	}
+	c.search(key, inodes[index].pgid)
 }
 
 // nsearch searches the leaf node on the top of the stack for a key.
@@ -529,9 +464,6 @@ func (c *Cursor) nsearch(key []byte) {
 			return bytes.Compare(n.inodes[offset+i].key, key) != -1
 		})
 		e.index = offset + index
-		if c.bucket.enum {
-			c.idx += uint64(index)
-		}
 		return
 	}
 
@@ -549,9 +481,6 @@ func (c *Cursor) nsearch(key []byte) {
 	switch bytes.Compare(pagePrefix, keyPrefix) {
 	case -1:
 		e.index = int(p.count)
-		if c.bucket.enum {
-			c.idx += uint64(e.index - offset)
-		}
 	case 1:
 		// e.index does not change
 	case 0:
@@ -561,9 +490,6 @@ func (c *Cursor) nsearch(key []byte) {
 			return bytes.Compare(inodes[offset+i].key(), shortKey) != -1
 		})
 		e.index = offset + index
-		if c.bucket.enum {
-			c.idx += uint64(index)
-		}
 	}
 }
 
@@ -635,16 +561,4 @@ func (r *elemRef) count(b *Bucket) int {
 	}
 	p := b.lookupPage(r.pageID)
 	return int(p.count)
-}
-
-// Assumes that the enum is turned on
-func (r *elemRef) size(c *Cursor) uint64 {
-	if r.node != nil {
-		return r.node.inodes[r.index].size
-	}
-	p := c.bucket.lookupPage(r.pageID)
-	if (p.flags & branchPageFlag) == 0 {
-		return 1
-	}
-	return uint64(p.branchPageElementX(uint16(r.index)).size) + p.minsize
 }
