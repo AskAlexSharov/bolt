@@ -20,14 +20,10 @@ jobs:
 
       - name: Build
         run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-          cd $GOPATH/src/github.com/${{ github.repository }}
+          ls
           go build -i -v .
 
       - name: Test
         run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-          cd $GOPATH/src/github.com/${{ github.repository }}
+          ls
           go test -v -short .
