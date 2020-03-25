@@ -15,10 +15,10 @@ jobs:
         id: go
 
       - name: setup env
-          run: |
-            echo "::set-env name=GOPATH::$(go env GOPATH)"
-            echo "::add-path::$(go env GOPATH)/bin"
-          shell: bash
+        run: |
+          echo "::set-env name=GOPATH::$(go env GOPATH)"
+          echo "::add-path::$(go env GOPATH)/bin"
+        shell: bash
 
       - uses: actions/checkout@v1
         with:
