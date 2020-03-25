@@ -11,13 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ matrix.go }}
         id: go
-
-      - name: Get dependencies
-        run: go get -v -t -d ./...
 
       - name: Build
         run: go build -i -v .
