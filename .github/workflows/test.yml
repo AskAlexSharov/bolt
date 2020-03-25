@@ -10,6 +10,9 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
+        with:
+          path: src/github.com/${{ github.repository }}
+
       - uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ matrix.go }}
