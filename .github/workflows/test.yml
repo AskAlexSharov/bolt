@@ -9,7 +9,7 @@ jobs:
         go: [ '1.14', '1.13' ]
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v1
 
       - uses: actions/setup-go@v1
         with:
