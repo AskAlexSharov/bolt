@@ -20,10 +20,12 @@ jobs:
 
       - name: Build
         run: |
+          cd src/github.com/${{ github.repository }}
           ls
           go build -i -v .
 
       - name: Test
         run: |
+          cd src/github.com/${{ github.repository }}
           ls
           go test -v -short .
