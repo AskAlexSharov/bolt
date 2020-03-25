@@ -15,14 +15,14 @@ jobs:
           go-version: ${{ matrix.go }}
         id: go
 
-      - name: setup env
+      - name: Build
         run: |
           echo "::set-env name=GOPATH::$(go env GOPATH)"
           echo "::add-path::$(go env GOPATH)/bin"
-        shell: bash
-
-      - name: Build
-        run: go build -i -v .
+          go build -i -v .
 
       - name: Test
-        run: go test -v -short .
+        run: |
+          echo "::set-env name=GOPATH::$(go env GOPATH)"
+          echo "::add-path::$(go env GOPATH)/bin"
+          go test -v -short .
