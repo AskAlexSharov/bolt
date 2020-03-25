@@ -15,10 +15,12 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
 
-      - run: pwd
-
       - name: Build
-        run: go build -i -v .
+        run: |
+          cd $GOPATH/src/github.com/${{ github.repository }}
+          go build -i -v .
 
       - name: Test
-        run: go test -v -short .
+        run: |
+          cd $GOPATH/src/github.com/${{ github.repository }}
+          go test -v -short .
