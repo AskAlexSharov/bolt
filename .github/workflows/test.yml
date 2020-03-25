@@ -11,16 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: actions/setup-go@v2-beta
+      - uses: actions/setup-go@v1
         with:
           go-version: ${{ matrix.go }}
 
       - name: Build
-        run: |
-          cd $GOPATH/src/github.com/${{ github.repository }}
-          go build -i -v .
+        run: go build -i -v .
 
       - name: Test
-        run: |
-          cd $GOPATH/src/github.com/${{ github.repository }}
-          go test -v -short .
+        run: go test -v -short .
