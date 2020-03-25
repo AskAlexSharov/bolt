@@ -9,13 +9,13 @@ jobs:
         go: [ '1.14', '1.13' ]
     runs-on: ${{ matrix.platform }}
     steps:
-
       - uses: actions/checkout@v2
 
-      - name: Set up Go
-        uses: actions/setup-go@v2-beta
+      - uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ matrix.go }}
+
+      - run: pwd
 
       - name: Build
         run: go build -i -v .
