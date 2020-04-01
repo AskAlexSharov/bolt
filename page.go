@@ -8,7 +8,8 @@ import (
 	"unsafe"
 )
 
-const pageHeaderSize = unsafe.Offsetof(((*page)(nil)).ptr)
+//const pageHeaderSize = unsafe.Offsetof(((*page)(nil)).ptr)
+const pageHeaderSize = unsafe.Sizeof(page{})
 
 const minKeysPerPage = 2
 
@@ -35,7 +36,6 @@ type page struct {
 	overflow   uint32
 	prefixpos  uint32
 	prefixsize uint32
-	ptr        uintptr
 }
 
 // typ returns a human readable page type string used for debugging.

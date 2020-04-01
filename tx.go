@@ -478,7 +478,7 @@ func (tx *Tx) allocate(count int) (*page, error) {
 	tx.pages[p.id] = p
 
 	// Update statistics.
-	tx.stats.PageCount++
+	tx.stats.PageCount += count
 	tx.stats.PageAlloc += count * tx.db.pageSize
 
 	return p, nil
@@ -520,7 +520,7 @@ func (tx *Tx) write() error {
 			}
 
 			// Update statistics.
-			tx.stats.Write += sz
+			tx.stats.Write++
 
 			// Exit inner for loop if we've written all the chunks.
 			size -= sz
