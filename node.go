@@ -39,7 +39,7 @@ func (n *node) minKeys() int {
 
 // size returns the size of the node after serialization.
 func (n *node) size() int {
-	sz, elsz := int(pageHeaderSize), int(n.pageElementSize())
+	sz, elsz := pageHeaderSize, n.pageElementSize()
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
@@ -57,10 +57,10 @@ func (n *node) size() int {
 				prefix = prefix[:j]
 			}
 		}
-		sz += elsz + len(item.key) + len(item.value)
+		sz += elsz + uintptr(len(item.key)) + uintptr(len(item.value))
 	}
-	sz -= len(prefix) * (len(n.inodes) - 1) // Prefix is only included once4
-	return sz
+	sz -= uintptr(len(prefix)) * (uintptr(len(n.inodes)) - 1) // Prefix is only included once
+	return int(sz)
 }
 
 // sizeLessThan returns true if the node is less than a given size.
