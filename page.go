@@ -10,8 +10,6 @@ import (
 
 const pageHeaderSize = unsafe.Offsetof(((*page)(nil)).ptr)
 
-//const pageHeaderSize = unsafe.Sizeof(page{})
-
 const minKeysPerPage = 2
 
 const branchPageElementSize = unsafe.Sizeof(branchPageElement{})
@@ -57,16 +55,13 @@ func (p *page) typ() string {
 
 // meta returns a pointer to the metadata section of the page.
 func (p *page) meta() *meta {
-	//return (*meta)(unsafe.Pointer(&p.ptr))
-	return (*meta)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + unsafe.Sizeof(*p)))
+	return (*meta)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + pageHeaderSize))
 }
 
 // leafPageElement retrieves the leaf node by index
 func (p *page) leafPageElement(index uint16) *leafPageElement {
-	n := &((*[maxAllocSize]leafPageElement)(unsafe.Pointer(&p.ptr)))[index]
-	return n
-	off := uintptr(index) * unsafe.Sizeof(leafPageElement{})
-	return (*leafPageElement)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + unsafe.Sizeof(*p) + off))
+	off := uintptr(index) * leafPageElementSize
+	return (*leafPageElement)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + pageHeaderSize + off))
 }
 
 // leafPageElements retrieves a list of leaf nodes.
@@ -74,9 +69,8 @@ func (p *page) leafPageElements() []leafPageElement {
 	if p.count == 0 {
 		return nil
 	}
-	return ((*[0x7FFFFFF]leafPageElement)(unsafe.Pointer(&p.ptr)))[:]
 	return *(*[]leafPageElement)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(p)) + unsafe.Sizeof(*p),
+		Data: uintptr(unsafe.Pointer(p)) + pageHeaderSize,
 		Len:  int(p.count),
 		Cap:  int(p.count),
 	}))
@@ -84,9 +78,8 @@ func (p *page) leafPageElements() []leafPageElement {
 
 // branchPageElement retrieves the branch node by index
 func (p *page) branchPageElement(index uint16) *branchPageElement {
-	return &((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[index]
 	off := uintptr(index) * unsafe.Sizeof(branchPageElement{})
-	return (*branchPageElement)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + unsafe.Sizeof(*p) + off))
+	return (*branchPageElement)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + pageHeaderSize + off))
 }
 
 // branchPageElements retrieves a list of branch nodes.
@@ -94,17 +87,19 @@ func (p *page) branchPageElements() []branchPageElement {
 	if p.count == 0 {
 		return nil
 	}
-	return ((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[:]
 	return *(*[]branchPageElement)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(p)) + unsafe.Sizeof(*p),
+		Data: uintptr(unsafe.Pointer(p)) + pageHeaderSize,
 		Len:  int(p.count),
 		Cap:  int(p.count),
 	}))
 }
 
 func (p *page) keyPrefix() []byte {
-	buf := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))
-	return (*[maxAllocSize]byte)(unsafe.Pointer(&buf[p.prefixpos]))[:p.prefixsize:p.prefixsize]
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(p)) + pageHeaderSize + uintptr(p.prefixpos),
+		Len:  int(p.prefixsize),
+		Cap:  int(p.prefixsize),
+	}))
 }
 
 // dump writes n bytes of the page to STDERR as hex output.
