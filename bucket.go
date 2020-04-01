@@ -130,14 +130,19 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 func (b *Bucket) openBucket(value []byte) *Bucket {
 	var child = newBucket(b.tx)
 
-	// clone the value so that it survices resize of memory map
-	if !b.tx.writable {
+	// Unaligned access requires a copy to be made.
+	const unalignedMask = unsafe.Alignof(struct {
+		bucket
+		page
+	}{}) - 1
+	unaligned := uintptr(unsafe.Pointer(&value[0]))&unalignedMask != 0
+	if unaligned {
 		value = cloneBytes(value)
 	}
 
 	// If this is a writable transaction then we need to copy the bucket entry.
 	// Read-only transactions can point directly at the mmap entry.
-	if b.tx.writable {
+	if b.tx.writable && !unaligned {
 		child.bucket = &bucket{}
 		*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
 	} else {
