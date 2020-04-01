@@ -3,6 +3,7 @@ package bolt
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sort"
 	"unsafe"
 )
@@ -280,14 +281,25 @@ func (n *node) write(p *page) {
 	}
 
 	p.minsize = minSize
-	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*uintptr(len(n.inodes)):]
+	bp := uintptr(unsafe.Pointer(p)) + pageHeaderSize + n.pageElementSize()*uintptr(len(n.inodes))
+	b := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: bp,
+		Len:  0,
+		Cap:  0,
+	}))
+
 	if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 		// Write prefix
 		if len(b) < plen {
-			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
+			b = *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+				Data: bp,
+				Len:  plen,
+				Cap:  plen,
+			}))
 		}
 		copy(b[0:], prefix)
 		b = b[plen:]
+		bp += uintptr(plen)
 	}
 
 	// Loop over each item and write it to the page.
@@ -297,13 +309,13 @@ func (n *node) write(p *page) {
 		// Write the page element.
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
-			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
+			elem.pos = uint32(bp - uintptr(unsafe.Pointer(elem)))
 			elem.flags = item.flags
 			elem.ksize = uint32(len(item.key) - plen)
 			elem.vsize = uint32(len(item.value))
 		} else {
 			elem := p.branchPageElement(uint16(i))
-			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
+			elem.pos = uint32(bp - uintptr(unsafe.Pointer(elem)))
 			elem.ksize = uint32(len(item.key) - plen)
 			elem.pgid = item.pgid
 			_assert(elem.pgid != p.id, "write: circular dependency occurred")
@@ -314,9 +326,16 @@ func (n *node) write(p *page) {
 		//
 		// See: https://github.com/boltdb/bolt/pull/335
 		klen, vlen := len(item.key)-plen, len(item.value)
+		sz := klen + vlen
 		if len(b) < klen+vlen {
-			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
+			//b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
+			b = *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+				Data: bp,
+				Len:  sz,
+				Cap:  sz,
+			}))
 		}
+		bp += uintptr(sz)
 
 		// Write data for the element to the end of the page.
 		copy(b[0:], item.key[plen:])
