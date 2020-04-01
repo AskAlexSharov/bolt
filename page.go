@@ -36,7 +36,6 @@ type page struct {
 	prefixpos  uint32
 	prefixsize uint32
 	ptr        uintptr
-	minsize    uint64
 }
 
 // typ returns a human readable page type string used for debugging.

@@ -254,9 +254,8 @@ func (n *node) write(p *page) {
 	if p.count == 0 {
 		return
 	}
-	// Calculate common prefix and minSize
+	// Calculate common prefix
 	var prefix []byte
-	var minSize uint64 = 0
 	for _, item := range n.inodes {
 		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
@@ -280,7 +279,6 @@ func (n *node) write(p *page) {
 		_assert(plen == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
-	p.minsize = minSize
 	bp := uintptr(unsafe.Pointer(p)) + pageHeaderSize + n.pageElementSize()*uintptr(len(n.inodes))
 	b := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: bp,
