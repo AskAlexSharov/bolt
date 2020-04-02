@@ -296,11 +296,11 @@ func TestOpen_Size_Large(t *testing.T) {
 
 	// Insert until we get above the minimum 4MB size.
 	var index uint64
-	var v = make([]byte, 1_000_000)
 	for i := 0; i < 100; i++ {
 		if err := db.Batch(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
 			for j := 0; j < 100; j++ {
+				var v = make([]byte, 1_000_000)
 				if err := b.Put(u64tob(index), v); err != nil {
 					t.Fatal(err)
 				}
@@ -412,7 +412,7 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 	path := tempfile()
 	defer os.Remove(path)
 
-	initMmapSize := 1 << 31  // 2GB
+	initMmapSize := 1 << 30  // 1GB
 	testWriteSize := 1 << 27 // 134MB
 
 	db, err := bolt.Open(path, 0666, &bolt.Options{InitialMmapSize: initMmapSize})
@@ -444,24 +444,20 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	done := make(chan struct{})
+	done := make(chan error, 1)
 
-	errs := make(chan error, 1) // use a channel to hand off the error
 	go func() {
-		defer close(errs)
-		if err := wtx.Commit(); err != nil {
-			errs <- err
-			return
-		}
-		done <- struct{}{}
+		err := wtx.Commit()
+		done <- err
 	}()
 
 	select {
 	case <-time.After(5 * time.Second):
 		t.Errorf("unexpected that the reader blocks writer")
-	case err := <-errs:
-		t.Fatal(err)
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if err := rtx.Rollback(); err != nil {
