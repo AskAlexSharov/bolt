@@ -429,12 +429,12 @@ func TestBucket_Delete_NonExisting(t *testing.T) {
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte("widgets"), false)
+		b, err := tx.CreateBucket([]byte("widgets"))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err = b.CreateBucket([]byte("nested"), false); err != nil {
+		if _, err = b.CreateBucket([]byte("nested")); err != nil {
 			t.Fatal(err)
 		}
 		return nil
