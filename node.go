@@ -3,6 +3,7 @@ package bolt
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sort"
 	"unsafe"
 )
@@ -56,16 +57,16 @@ func (n *node) size() int {
 				prefix = prefix[:j]
 			}
 		}
-		sz += elsz + len(item.key) + len(item.value)
+		sz += elsz + uintptr(len(item.key)) + uintptr(len(item.value))
 	}
-	sz -= len(prefix) * (len(n.inodes) - 1) // Prefix is only included once4
-	return sz
+	sz -= uintptr(len(prefix)) * (uintptr(len(n.inodes)) - 1) // Prefix is only included once
+	return int(sz)
 }
 
 // sizeLessThan returns true if the node is less than a given size.
 // This is an optimization to avoid calculating a large node when we only need
 // to know if it fits inside a certain page size.
-func (n *node) sizeLessThan(v int) bool {
+func (n *node) sizeLessThan(v uintptr) bool {
 	sz, elsz := pageHeaderSize, n.pageElementSize()
 	var prefix []byte
 	for i := 0; i < len(n.inodes); i++ {
@@ -84,8 +85,8 @@ func (n *node) sizeLessThan(v int) bool {
 				prefix = prefix[:j]
 			}
 		}
-		sz += elsz + len(item.key) + len(item.value)
-		if sz-len(prefix)*i >= v {
+		sz += elsz + uintptr(len(item.key)) + uintptr(len(item.value))
+		if sz-uintptr(len(prefix)*i) >= v {
 			return false
 		}
 	}
@@ -93,7 +94,7 @@ func (n *node) sizeLessThan(v int) bool {
 }
 
 // pageElementSize returns the size of each page element based on the type of node.
-func (n *node) pageElementSize() int {
+func (n *node) pageElementSize() uintptr {
 	if n.isLeaf {
 		return leafPageElementSize
 	}
@@ -298,21 +299,30 @@ func (n *node) write(p *page) {
 		}
 	}
 	plen := len(prefix)
-	p.prefixpos = uint32(n.pageElementSize() * len(n.inodes))
+	p.prefixpos = uint32(n.pageElementSize() * uintptr(len(n.inodes)))
 	p.prefixsize = uint32(plen)
 	if n.bucket.tx.db.KeysPrefixCompressionDisable {
 		_assert(plen == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
-	p.minsize = minSize
-	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
+	bp := uintptr(unsafe.Pointer(p)) + pageHeaderSize + n.pageElementSize()*uintptr(len(n.inodes))
+	b := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: bp,
+		Len:  0,
+		Cap:  0,
+	}))
 	if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 		// Write prefix
 		if len(b) < plen {
-			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
+			b = *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+				Data: bp,
+				Len:  plen,
+				Cap:  plen,
+			}))
 		}
 		copy(b[0:], prefix)
 		b = b[plen:]
+		bp += uintptr(plen)
 	}
 
 	// Loop over each item and write it to the page.
@@ -322,21 +332,21 @@ func (n *node) write(p *page) {
 		// Write the page element.
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
-			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
+			elem.pos = uint32(bp - uintptr(unsafe.Pointer(elem)))
 			elem.flags = item.flags
 			elem.ksize = uint32(len(item.key) - plen)
 			elem.vsize = uint32(len(item.value))
 		} else {
 			if enum {
 				elem := p.branchPageElementX(uint16(i))
-				elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
+				elem.pos = uint32(bp - uintptr(unsafe.Pointer(elem)))
 				elem.ksize = uint32(len(item.key) - plen)
 				elem.pgid = item.pgid
 				elem.size = uint32(item.size - minSize)
 				_assert(elem.pgid != p.id, "write: circular dependency occurred")
 			} else {
 				elem := p.branchPageElement(uint16(i))
-				elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
+				elem.pos = uint32(bp - uintptr(unsafe.Pointer(elem)))
 				elem.ksize = uint32(len(item.key) - plen)
 				elem.pgid = item.pgid
 				_assert(elem.pgid != p.id, "write: circular dependency occurred")
@@ -348,9 +358,15 @@ func (n *node) write(p *page) {
 		//
 		// See: https://github.com/boltdb/bolt/pull/335
 		klen, vlen := len(item.key)-plen, len(item.value)
+		sz := klen + vlen
 		if len(b) < klen+vlen {
-			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
+			b = *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+				Data: bp,
+				Len:  sz,
+				Cap:  sz,
+			}))
 		}
+		bp += uintptr(sz)
 
 		// Write data for the element to the end of the page.
 		copy(b[0:], item.key[plen:])
@@ -364,7 +380,7 @@ func (n *node) write(p *page) {
 
 // split breaks up a node into multiple smaller nodes, if appropriate.
 // This should only be called from the spill() function.
-func (n *node) split(pageSize int) ([]*node, []uint64) {
+func (n *node) split(pageSize uintptr) ([]*node, []uint64) {
 	var nodes []*node
 	var sizes []uint64
 
@@ -389,7 +405,7 @@ func (n *node) split(pageSize int) ([]*node, []uint64) {
 
 // splitTwo breaks up a node into two smaller nodes, if appropriate.
 // This should only be called from the split() function.
-func (n *node) splitTwo(pageSize int) (*node, uint64, *node) {
+func (n *node) splitTwo(pageSize uintptr) (*node, uint64, *node) {
 	// Ignore the split if the page doesn't have at least enough nodes for
 	// two pages or if the nodes can fit in a single page.
 	if len(n.inodes) <= (minKeysPerPage*2) || n.sizeLessThan(pageSize) {
@@ -439,13 +455,13 @@ func (n *node) splitTwo(pageSize int) (*node, uint64, *node) {
 // splitIndex finds the position where a page will fill a given threshold.
 // It returns the index as well as the size of the first page.
 // This is only be called from split().
-func (n *node) splitIndex(threshold int) (index, sz int) {
+func (n *node) splitIndex(threshold int) (index, sz uintptr) {
 	sz = pageHeaderSize
 
 	var prefix []byte
 	// Loop until we only have the minimum number of keys required for the second page.
 	for i := 0; i < len(n.inodes)-minKeysPerPage; i++ {
-		index = i
+		index = uintptr(i)
 		inode := n.inodes[i]
 		if !n.bucket.tx.db.KeysPrefixCompressionDisable {
 			if prefix == nil {
@@ -461,11 +477,11 @@ func (n *node) splitIndex(threshold int) (index, sz int) {
 				prefix = prefix[:j]
 			}
 		}
-		elsize := n.pageElementSize() + len(inode.key) + len(inode.value)
+		elsize := n.pageElementSize() + uintptr(len(inode.key)) + uintptr(len(inode.value))
 
 		// If we have at least the minimum number of keys and adding another
 		// node would put us over the threshold then exit and return.
-		if i >= minKeysPerPage && sz+elsize-len(prefix)*i > threshold {
+		if index >= minKeysPerPage && sz+elsize-uintptr(len(prefix)*i) > uintptr(threshold) {
 			break
 		}
 
@@ -498,7 +514,7 @@ func (n *node) spill() error {
 	n.children = nil
 
 	// Split nodes into appropriate sizes. The first node will always be n.
-	var nodes, sizes = n.split(tx.db.pageSize)
+	var nodes, sizes = n.split(uintptr(tx.db.pageSize))
 	for i, node := range nodes {
 		// Add node's page to the freelist if it's not new.
 		if node.pgid > 0 {
@@ -735,9 +751,11 @@ func (n *node) dump() {
 
 type nodes []*node
 
-func (s nodes) Len() int           { return len(s) }
-func (s nodes) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s nodes) Less(i, j int) bool { return bytes.Compare(s[i].inodes[0].key, s[j].inodes[0].key) == -1 }
+func (s nodes) Len() int      { return len(s) }
+func (s nodes) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s nodes) Less(i, j int) bool {
+	return bytes.Compare(s[i].inodes[0].key, s[j].inodes[0].key) == -1
+}
 
 // inode represents an internal node inside of a node.
 // It can be used to point to elements in a page or point
