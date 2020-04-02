@@ -446,7 +446,6 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 
 	done := make(chan error, 1)
 
-	errs := make(chan error, 1) // use a channel to hand off the error
 	go func() {
 		err := wtx.Commit()
 		done <- err
