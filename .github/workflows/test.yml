@@ -17,8 +17,8 @@ jobs:
           go-version: ${{ matrix.go }}
 
       - name: Build
-        run: go build -i -v .
+        run: CGO_ENABLED=0 go build -i -v .
 
       - name: Test
-        run: go test -v -p 1 ./...
+        run: CGO_ENABLED=0 go test -v -p 1 ./...
 
