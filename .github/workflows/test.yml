@@ -16,9 +16,7 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
 
-      - name: Build
-        run: CGO_ENABLED=0 go build -i -v .
-
       - name: Test
-        run: CGO_ENABLED=0 go test -v -p 1 ./...
-
+        run: go test -v -p 1 -timeout 20m ./...
+        env:
+          CGO_ENABLED: 0
