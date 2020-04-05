@@ -56,8 +56,6 @@ func (p *page) typ() string {
 
 // meta returns a pointer to the metadata section of the page.
 func (p *page) meta() *meta {
-	fmt.Printf("a: %#v\n", (*meta)(unsafe.Pointer(uintptr(unsafe.Pointer(p))+pageHeaderSize)))
-	fmt.Printf("b: %#v\n", (*meta)(unsafe.Pointer(uintptr(unsafe.Pointer(p))+unsafe.Sizeof(*p))))
 	return (*meta)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + pageHeaderSize))
 }
 
