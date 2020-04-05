@@ -305,6 +305,7 @@ func (n *node) write(p *page) {
 		_assert(plen == 0, "key prefix: non-zero prefix in db with disabled keys compression")
 	}
 
+	p.minsize = minSize
 	bp := uintptr(unsafe.Pointer(p)) + pageHeaderSize + n.pageElementSize()*uintptr(len(n.inodes))
 	b := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: bp,
