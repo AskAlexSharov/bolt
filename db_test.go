@@ -24,17 +24,11 @@ import (
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
 
-// version is the data file format version.
-const version = 2
-
-// magic is the marker value to indicate that a file is a Bolt DB.
-const magic uint32 = 0xED0CDAED
-
 // pageSize is the size of one page in the data file.
 const pageSize = 4096
 
 // pageHeaderSize is the size of a page header.
-const pageHeaderSize = 16
+const pageHeaderSize = 32
 
 // meta represents a simplified version of a database meta page for testing.
 type meta struct {
@@ -147,7 +141,7 @@ func TestOpen_ErrInvalid(t *testing.T) {
 }
 
 // Ensure that opening a file with two invalid versions returns ErrVersionMismatch.
-func _TestOpen_ErrVersionMismatch(t *testing.T) {
+func TestOpen_ErrVersionMismatch(t *testing.T) {
 	if pageSize != os.Getpagesize() {
 		t.Skip("page size mismatch")
 	}
