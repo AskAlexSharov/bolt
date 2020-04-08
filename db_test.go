@@ -452,7 +452,7 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 	}()
 
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Errorf("unexpected that the reader blocks writer")
 	case err := <-done:
 		if err != nil {
