@@ -1307,7 +1307,6 @@ func (cmd *BenchCommand) Run(args ...string) error {
 	if err := cmd.runWrites(db, options, &results); err != nil {
 		return fmt.Errorf("write: %v", err)
 	}
-
 	// Read from the database.
 	if err := cmd.runReads(db, options, &results); err != nil {
 		return fmt.Errorf("bench: read: %s", err)
@@ -1423,7 +1422,6 @@ func (cmd *BenchCommand) runWritesRandomNested(db *bolt.DB, options *BenchOption
 
 func (cmd *BenchCommand) runWritesWithSource(db *bolt.DB, options *BenchOptions, results *BenchResults, keySource func() uint32) error {
 	results.WriteOps = options.Iterations
-
 	for i := 0; i < options.Iterations; i += options.BatchSize {
 		if err := db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists(benchBucketName, false)
@@ -1511,6 +1509,10 @@ func (cmd *BenchCommand) runReads(db *bolt.DB, options *BenchOptions, results *B
 		default:
 			err = cmd.runReadsSequential(db, options, results)
 		}
+	case "seek":
+		err = cmd.runReadsSeek(db, options, results)
+	case "seekTo":
+		err = cmd.runReadsSeekTo(db, options, results)
 	default:
 		return fmt.Errorf("invalid read mode: %s", options.ReadMode)
 	}
@@ -1524,6 +1526,78 @@ func (cmd *BenchCommand) runReads(db *bolt.DB, options *BenchOptions, results *B
 	}
 
 	return err
+}
+
+func (cmd *BenchCommand) runReadsSeek(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
+	return db.View(func(tx *bolt.Tx) error {
+		t := time.Now()
+
+		for {
+			var count int
+
+			c := tx.Bucket(benchBucketName).Cursor()
+			for j := uint32(0); j < uint32(options.Iterations); j += uint32(options.BatchSize) {
+				key := make([]byte, options.KeySize)
+				// Write key as uint32.
+
+				binary.BigEndian.PutUint32(key, j)
+				_, v := c.Seek(key)
+				if v == nil {
+					return errors.New("invalid value")
+				}
+				count++
+			}
+
+			//if options.WriteMode == "seq" && count != options.Iterations {
+			//	return fmt.Errorf("read seq: iter mismatch: expected %d, got %d", options.Iterations, count)
+			//}
+
+			results.ReadOps += count
+
+			// Make sure we do this for at least a second.
+			if time.Since(t) >= time.Second {
+				break
+			}
+		}
+
+		return nil
+	})
+}
+
+func (cmd *BenchCommand) runReadsSeekTo(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
+	return db.View(func(tx *bolt.Tx) error {
+		t := time.Now()
+
+		for {
+			var count int
+
+			c := tx.Bucket(benchBucketName).Cursor()
+			for j := uint32(0); j < uint32(options.Iterations); j += uint32(options.BatchSize) {
+				key := make([]byte, options.KeySize)
+				// Write key as uint32.
+
+				binary.BigEndian.PutUint32(key, j)
+				_, v := c.SeekTo(key)
+				if v == nil {
+					return errors.New("invalid value")
+				}
+				count++
+			}
+
+			//if options.WriteMode == "seq" && count != options.Iterations {
+			//	return fmt.Errorf("read seq: iter mismatch: expected %d, got %d", options.Iterations, count)
+			//}
+
+			results.ReadOps += count
+
+			// Make sure we do this for at least a second.
+			if time.Since(t) >= time.Second {
+				break
+			}
+		}
+
+		return nil
+	})
 }
 
 func (cmd *BenchCommand) runReadsSequential(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
