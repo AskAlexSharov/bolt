@@ -1213,19 +1213,19 @@ func _TestBucket_Stats(t *testing.T) {
 			t.Fatalf("unexpected Depth: %d", stats.Depth)
 		}
 
-		branchInuse := 16     // branch page header
-		branchInuse += 7 * 16 // branch elements
-		branchInuse += 7 * 3  // branch keys (6 3-byte keys)
+		branchInuse := pageHeaderSize // branch page header
+		branchInuse += 7 * 16         // branch elements
+		branchInuse += 7 * 3          // branch keys (6 3-byte keys)
 		if stats.BranchInuse != branchInuse {
-			t.Fatalf("unexpected BranchInuse: %d", stats.BranchInuse)
+			t.Fatalf("unexpected BranchInuse: %d %d", stats.BranchInuse, branchInuse)
 		}
 
-		leafInuse := 7 * 16                      // leaf page header
+		leafInuse := 7 * pageHeaderSize          // leaf page header
 		leafInuse += 501 * 16                    // leaf elements
 		leafInuse += 500*3 + len(bigKey)         // leaf keys
 		leafInuse += 1*10 + 2*90 + 3*400 + 10000 // leaf values
 		if stats.LeafInuse != leafInuse {
-			t.Fatalf("unexpected LeafInuse: %d", stats.LeafInuse)
+			t.Fatalf("unexpected LeafInuse: %d %d", stats.LeafInuse, leafInuse)
 		}
 
 		// Only check allocations for 4KB pages.
@@ -1320,7 +1320,7 @@ func _TestBucket_Stats_RandomFill(t *testing.T) {
 }
 
 // Ensure a bucket can calculate stats.
-func _TestBucket_Stats_Small(t *testing.T) {
+func TestBucket_Stats_Small(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 
@@ -1374,7 +1374,7 @@ func _TestBucket_Stats_Small(t *testing.T) {
 			t.Fatalf("unexpected BucketN: %d", stats.BucketN)
 		} else if stats.InlineBucketN != 1 {
 			t.Fatalf("unexpected InlineBucketN: %d", stats.InlineBucketN)
-		} else if stats.InlineBucketInuse != 16+16+6 {
+		} else if stats.InlineBucketInuse != 32+16+6 {
 			t.Fatalf("unexpected InlineBucketInuse: %d", stats.InlineBucketInuse)
 		}
 
@@ -1384,7 +1384,7 @@ func _TestBucket_Stats_Small(t *testing.T) {
 	}
 }
 
-func _TestBucket_Stats_EmptyBucket(t *testing.T) {
+func TestBucket_Stats_EmptyBucket(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
 
@@ -1433,7 +1433,7 @@ func _TestBucket_Stats_EmptyBucket(t *testing.T) {
 			t.Fatalf("unexpected BucketN: %d", stats.BucketN)
 		} else if stats.InlineBucketN != 1 {
 			t.Fatalf("unexpected InlineBucketN: %d", stats.InlineBucketN)
-		} else if stats.InlineBucketInuse != 16 {
+		} else if stats.InlineBucketInuse != 32 {
 			t.Fatalf("unexpected InlineBucketInuse: %d", stats.InlineBucketInuse)
 		}
 
@@ -1536,7 +1536,7 @@ func _TestBucket_Stats_Nested(t *testing.T) {
 		} else if stats.InlineBucketN != 1 {
 			t.Fatalf("unexpected InlineBucketN: %d", stats.InlineBucketN)
 		} else if stats.InlineBucketInuse != baz {
-			t.Fatalf("unexpected InlineBucketInuse: %d", stats.InlineBucketInuse)
+			t.Fatalf("unexpected InlineBucketInuse: %d %d", stats.InlineBucketInuse, baz)
 		}
 
 		return nil

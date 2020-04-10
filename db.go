@@ -1004,8 +1004,9 @@ type Options struct {
 // DefaultOptions represent the options used if nil options are passed into Open().
 // No timeout is used which will cause Bolt to wait indefinitely for a lock.
 var DefaultOptions = &Options{
-	Timeout:    0,
-	NoGrowSync: false,
+	Timeout:                      0,
+	NoGrowSync:                   false,
+	KeysPrefixCompressionDisable: false,
 }
 
 // Stats represents statistics about the database.
