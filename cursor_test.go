@@ -103,6 +103,74 @@ func TestCursor_Seek(t *testing.T) {
 	}
 }
 
+// Ensure that a Tx cursor can seek to the appropriate keys.
+func TestCursor_SeekTo(t *testing.T) {
+	db := MustOpenDB()
+	defer db.MustClose()
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx.CreateBucket([]byte("widgets2"), false)
+		tx.CreateBucket([]byte("widgets3"), false)
+
+		for i := uint8(0); i < 254; i++ {
+			for j := uint8(0); j < 254; j++ {
+				if err := b.Put([]byte{i, j}, []byte{i, j}); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		c := tx.Bucket([]byte("widgets")).Cursor()
+
+		// Exact match should go to the key.
+		if k, v := c.SeekTo([]byte{1, 2}); !bytes.Equal(k, []byte{1, 2}) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte{1, 2}) {
+			t.Fatalf("unexpected value: %v", v)
+		}
+
+		// Inexact match should go to the next key.
+		if k, v := c.SeekTo([]byte{3, 4}); !bytes.Equal(k, []byte{3, 4}) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte{3, 4}) {
+			t.Fatalf("unexpected value: %v", v)
+		}
+
+		// Low key should go to the first key.
+		//if k, v := c.SeekTo([]byte("")); !bytes.Equal(k, []byte{0,0}) {
+		//	t.Fatalf("unexpected key: %v", k)
+		//} else if !bytes.Equal(v, []byte{0,0}) {
+		//	t.Fatalf("unexpected value: %v", v)
+		//}
+
+		// High key should return no key.
+		if k, v := c.SeekTo([]byte{255, 0}); k != nil {
+			t.Fatalf("expected nil key: %v", k)
+		} else if v != nil {
+			t.Fatalf("expected nil value: %v", v)
+		}
+
+		// Can seek back
+		if k, v := c.SeekTo([]byte{3, 4}); !bytes.Equal(k, []byte{253, 118}) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte{253, 118}) {
+			t.Fatalf("unexpected value: %v", v)
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCursor_Delete(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()

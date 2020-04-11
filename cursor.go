@@ -458,10 +458,11 @@ func (c *Cursor) searchPage2(key []byte, p *page) {
 
 // Recursively search to the next page.
 func (c *Cursor) searchPage(key []byte, p *page) {
+	isEnum := c.bucket.enum
 	// Binary search for the correct range.
 	var inodes []branchPageElement
 	var inodesX []branchPageElementX
-	if c.bucket.enum {
+	if isEnum {
 		inodesX = p.branchPageElementsX()
 	} else {
 		inodes = p.branchPageElements()
@@ -497,7 +498,7 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	if index < offset {
 		index = offset
 	}
-	if c.bucket.enum {
+	if isEnum {
 		var idx uint64
 		e := elemRef{pageID: p.id}
 		for i, cnt := offset, index; i < cnt; i++ {
@@ -509,7 +510,7 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	c.stack[len(c.stack)-1].index = index
 
 	// Recursively search to the next page.
-	if c.bucket.enum {
+	if isEnum {
 		c.search(key, inodesX[index].pgid)
 	} else {
 		c.search(key, inodes[index].pgid)
@@ -614,7 +615,6 @@ func (c *Cursor) node() *node {
 // elemRef represents a reference to an element on a given page/node.
 type elemRef struct {
 	pageID pgid
-	pNil   bool
 	node   *node
 	index  int
 }

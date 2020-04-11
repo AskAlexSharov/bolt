@@ -100,9 +100,8 @@ func (n *node) pageElementSize() uintptr {
 	}
 	if n.bucket.enum {
 		return branchPageElementSizeX
-	} else {
-		return branchPageElementSize
 	}
+	return branchPageElementSize
 }
 
 // childAt returns the child node at a given index.

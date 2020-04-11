@@ -1664,8 +1664,6 @@ func fileSize(path string) int64 {
 	return fi.Size()
 }
 
-func warn(v ...interface{})              { fmt.Fprintln(os.Stderr, v...) }
-func warnf(msg string, v ...interface{}) { fmt.Fprintf(os.Stderr, msg+"\n", v...) }
 
 // u64tob converts a uint64 into an 8-byte slice.
 func u64tob(v uint64) []byte {
