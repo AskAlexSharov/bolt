@@ -1559,7 +1559,7 @@ func (cmd *BenchCommand) runReadsSeek(db *bolt.DB, options *BenchOptions, result
 			results.ReadOps += count
 
 			// Make sure we do this for at least a second.
-			if time.Since(t) >= 20*time.Second {
+			if time.Since(t) >= 5*time.Second {
 				break
 			}
 		}
@@ -1599,7 +1599,7 @@ func (cmd *BenchCommand) runReadsSeekTo(db *bolt.DB, options *BenchOptions, resu
 			results.ReadOps += count
 
 			// Make sure we do this for at least a second.
-			if time.Since(t) >= 20*time.Second {
+			if time.Since(t) >= 5*time.Second {
 				break
 			}
 		}
