@@ -1531,17 +1531,21 @@ func (cmd *BenchCommand) runReads(db *bolt.DB, options *BenchOptions, results *B
 func (cmd *BenchCommand) runReadsSeek(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
 	return db.View(func(tx *bolt.Tx) error {
 		t := time.Now()
+		keys := make([][]byte, options.Iterations/10)
+		i := 0
+		for j := uint32(0); j < uint32(options.Iterations); j += 100 {
+			key := make([]byte, options.KeySize)
+			binary.BigEndian.PutUint32(key, j)
+			keys[i] = key
+			i++
+		}
 
 		for {
 			var count int
 
 			c := tx.Bucket(benchBucketName).Cursor()
-			for j := uint32(0); j < uint32(options.Iterations); j += uint32(options.BatchSize) {
-				key := make([]byte, options.KeySize)
-				// Write key as uint32.
-
-				binary.BigEndian.PutUint32(key, j)
-				_, v := c.Seek(key)
+			for i := 0; i < len(keys); i++ {
+				_, v := c.Seek(keys[i])
 				if v == nil {
 					return errors.New("invalid value")
 				}
@@ -1555,7 +1559,7 @@ func (cmd *BenchCommand) runReadsSeek(db *bolt.DB, options *BenchOptions, result
 			results.ReadOps += count
 
 			// Make sure we do this for at least a second.
-			if time.Since(t) >= time.Second {
+			if time.Since(t) >= 5*time.Second {
 				break
 			}
 		}
@@ -1567,17 +1571,21 @@ func (cmd *BenchCommand) runReadsSeek(db *bolt.DB, options *BenchOptions, result
 func (cmd *BenchCommand) runReadsSeekTo(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
 	return db.View(func(tx *bolt.Tx) error {
 		t := time.Now()
+		keys := make([][]byte, options.Iterations/10)
+		i := 0
+		for j := uint32(0); j < uint32(options.Iterations); j += 100 {
+			key := make([]byte, options.KeySize)
+			binary.BigEndian.PutUint32(key, j)
+			keys[i] = key
+			i++
+		}
 
 		for {
 			var count int
 
 			c := tx.Bucket(benchBucketName).Cursor()
-			for j := uint32(0); j < uint32(options.Iterations); j += uint32(options.BatchSize) {
-				key := make([]byte, options.KeySize)
-				// Write key as uint32.
-
-				binary.BigEndian.PutUint32(key, j)
-				_, v := c.SeekTo(key)
+			for i := 0; i < len(keys); i++ {
+				_, v := c.SeekTo(keys[i])
 				if v == nil {
 					return errors.New("invalid value")
 				}
@@ -1591,7 +1599,7 @@ func (cmd *BenchCommand) runReadsSeekTo(db *bolt.DB, options *BenchOptions, resu
 			results.ReadOps += count
 
 			// Make sure we do this for at least a second.
-			if time.Since(t) >= time.Second {
+			if time.Since(t) >= 5*time.Second {
 				break
 			}
 		}
