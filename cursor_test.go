@@ -128,7 +128,8 @@ func TestCursor_SeekTo(t *testing.T) {
 	}
 
 	if err := db.View(func(tx *bolt.Tx) error {
-		c := tx.Bucket([]byte("widgets")).Cursor()
+		b := tx.Bucket([]byte("widgets"))
+		c := b.Cursor()
 
 		// Exact match should go to the key.
 		if k, v := c.SeekTo([]byte{1, 2}); !bytes.Equal(k, []byte{1, 2}) {
@@ -144,7 +145,7 @@ func TestCursor_SeekTo(t *testing.T) {
 			t.Fatalf("unexpected value: %v", v)
 		}
 
-		// Low key should go to the first key.
+		//// Low key should go to the first key.
 		//if k, v := c.SeekTo([]byte("")); !bytes.Equal(k, []byte{0,0}) {
 		//	t.Fatalf("unexpected key: %v", k)
 		//} else if !bytes.Equal(v, []byte{0,0}) {
@@ -162,6 +163,24 @@ func TestCursor_SeekTo(t *testing.T) {
 		if k, v := c.SeekTo([]byte{3, 4}); !bytes.Equal(k, []byte{253, 118}) {
 			t.Fatalf("unexpected key: %v", k)
 		} else if !bytes.Equal(v, []byte{253, 118}) {
+			t.Fatalf("unexpected value: %v", v)
+		}
+
+		if k, v := b.Cursor().SeekTo(nil); !bytes.Equal(k, []byte{0, 0}) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte{0, 0}) {
+			t.Fatalf("unexpected value: %v", v)
+		}
+
+		if k, v := b.Cursor().SeekTo([]byte("")); !bytes.Equal(k, []byte{0, 0}) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte{0, 0}) {
+			t.Fatalf("unexpected value: %v", v)
+		}
+
+		if k, v := b.Cursor().SeekTo([]byte{}); !bytes.Equal(k, []byte{0, 0}) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte{0, 0}) {
 			t.Fatalf("unexpected value: %v", v)
 		}
 

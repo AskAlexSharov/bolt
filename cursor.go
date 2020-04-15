@@ -196,15 +196,77 @@ func (c *Cursor) seek(seek []byte) (key []byte, value []byte, flags uint32) {
 	return c.keyValue()
 }
 
+var A = map[int]int{}
+var B = map[int]int{}
+
 // seekTo moves the cursor from the current position to a given key and return it
 // This is different from seek that always start seeking from the root
 func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
+	isEnum, hasPrefixCompression := c.bucket.enum, !c.bucket.tx.db.KeysPrefixCompressionDisable
 
 	// Move up the stack until we find the level at which we need to move forward
+	//var pageid pgid
+	//j := 0
+	//i := sort.Search(len(c.stack)-1, func(i int) bool {
+	//	j++
+	//	elem := &c.stack[i]
+	//	var lastkey []byte
+	//	if elem.node != nil {
+	//		n := elem.node
+	//		pageid = n.pgid
+	//		if len(n.inodes) > 0 {
+	//			lastkey = n.inodes[0].key
+	//		}
+	//	} else {
+	//		p := c.bucket.lookupPage(elem.pageID)
+	//		if p.count == 0 {
+	//			return true
+	//		}
+	//		pageid = p.id
+	//		if elem.isLeaf(c.bucket) {
+	//			if hasPrefixCompression {
+	//				lastkey = p.leafPageElement(0).key()
+	//			} else {
+	//				lastkey = append(p.keyPrefix(), p.leafPageElement(0).key()...)
+	//			}
+	//		} else {
+	//			if isEnum {
+	//				if hasPrefixCompression {
+	//					lastkey = p.branchPageElementX(0).key()
+	//				} else {
+	//					lastkey = append(p.keyPrefix(), p.branchPageElementX(0).key()...)
+	//				}
+	//			} else {
+	//				if hasPrefixCompression {
+	//					lastkey = p.branchPageElement(0).key()
+	//				} else {
+	//					lastkey = append(p.keyPrefix(), p.branchPageElement(0).key()...)
+	//				}
+	//			}
+	//		}
+	//	}
+	//	if bytes.Compare(seek, lastkey) >= 0 {
+	//		return true
+	//	} else {
+	//		if isEnum {
+	//			var idx uint64
+	//			e := elemRef{node: elem.node, pageID: elem.pageID}
+	//			for i, cnt := elem.index, e.count(c.bucket); i < cnt; i++ {
+	//				e.index = i
+	//				idx += e.size(c)
+	//			}
+	//			c.idx += idx
+	//		}
+	//	}
+	//	return false
+	//})
+
+	var j int
 	var i int
 	var pageid pgid
 	for i = len(c.stack) - 1; i >= 0; i-- {
+		j++
 		elem := &c.stack[i]
 		var lastkey []byte
 		if elem.node != nil {
@@ -220,20 +282,20 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 			}
 			pageid = p.id
 			if elem.isLeaf(c.bucket) {
-				if c.bucket.tx.db.KeysPrefixCompressionDisable {
+				if hasPrefixCompression {
 					lastkey = p.leafPageElement(p.count - 1).key()
 				} else {
 					lastkey = append(p.keyPrefix(), p.leafPageElement(p.count-1).key()...)
 				}
 			} else {
-				if c.bucket.enum {
-					if c.bucket.tx.db.KeysPrefixCompressionDisable {
+				if isEnum {
+					if hasPrefixCompression {
 						lastkey = p.branchPageElementX(p.count - 1).key()
 					} else {
 						lastkey = append(p.keyPrefix(), p.branchPageElementX(p.count-1).key()...)
 					}
 				} else {
-					if c.bucket.tx.db.KeysPrefixCompressionDisable {
+					if hasPrefixCompression {
 						lastkey = p.branchPageElement(p.count - 1).key()
 					} else {
 						lastkey = append(p.keyPrefix(), p.branchPageElement(p.count-1).key()...)
@@ -244,7 +306,7 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 		if bytes.Compare(seek, lastkey) <= 0 {
 			break
 		} else {
-			if c.bucket.enum {
+			if isEnum {
 				var idx uint64
 				e := elemRef{node: elem.node, pageID: elem.pageID}
 				for i, cnt := elem.index, e.count(c.bucket); i < cnt; i++ {
@@ -255,6 +317,8 @@ func (c *Cursor) seekTo(seek []byte) (key []byte, value []byte, flags uint32) {
 			}
 		}
 	}
+	A[j]++
+	B[len(c.stack)]++
 
 	// If we've hit the root page then start with the root
 	if i == -1 {
