@@ -1618,7 +1618,6 @@ func (cmd *BenchCommand) runReadsSeekTo(db *bolt.DB, options *BenchOptions, resu
 func (cmd *BenchCommand) runReadsSequential(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
 	return db.View(func(tx *bolt.Tx) error {
 		t := time.Now()
-
 		for {
 			var count int
 

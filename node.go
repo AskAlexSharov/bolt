@@ -224,9 +224,7 @@ func (n *node) read(p *page) {
 			elem := p.leafPageElement(uint16(i))
 			inode.flags = elem.flags
 			if prefixCompression {
-				inode.key = inode.key[:0]
-				inode.key = append(inode.key, prefix...)
-				inode.key = append(inode.key, elem.key()...)
+				inode.key = append(prefix, elem.key()...)
 			} else {
 				inode.key = elem.key()
 			}
@@ -236,9 +234,7 @@ func (n *node) read(p *page) {
 				elem := p.branchPageElementX(uint16(i))
 				inode.pgid = elem.pgid
 				if prefixCompression {
-					inode.key = inode.key[:0]
-					inode.key = append(inode.key, prefix...)
-					inode.key = append(inode.key, elem.key()...)
+					inode.key = append(prefix, elem.key()...)
 				} else {
 					inode.key = elem.key()
 				}
@@ -247,9 +243,7 @@ func (n *node) read(p *page) {
 				elem := p.branchPageElement(uint16(i))
 				inode.pgid = elem.pgid
 				if prefixCompression {
-					inode.key = inode.key[:0]
-					inode.key = append(inode.key, prefix...)
-					inode.key = append(inode.key, elem.key()...)
+					inode.key = append(prefix, elem.key()...)
 				} else {
 					inode.key = elem.key()
 				}
