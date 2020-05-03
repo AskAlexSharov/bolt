@@ -367,11 +367,9 @@ func (b *Bucket) MultiPut(pairs ...[]byte) error {
 			return ErrIncompatibleValue
 		}
 		// Insert into node.
-		key = cloneBytes(key)
 		if value == nil {
 			c.node().del(key)
 		} else {
-			value = cloneBytes(value)
 			if c.node().put(key, key, value, 0, 0, 0) {
 				// Increment size on all references starting from the top
 				var n = c.stack[0].node
