@@ -1386,6 +1386,8 @@ func (cmd *BenchCommand) runWrites(db *bolt.DB, options *BenchOptions, results *
 	switch options.WriteMode {
 	case "seq":
 		err = cmd.runWritesSequential(db, options, results)
+	case "multi":
+		err = cmd.runWritesMulti(db, options, results)
 	case "rnd":
 		err = cmd.runWritesRandom(db, options, results)
 	case "seq-nest":
@@ -1410,6 +1412,11 @@ func (cmd *BenchCommand) runWrites(db *bolt.DB, options *BenchOptions, results *
 func (cmd *BenchCommand) runWritesSequential(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
 	var i = uint32(0)
 	return cmd.runWritesWithSource(db, options, results, func() uint32 { i++; return i })
+}
+
+func (cmd *BenchCommand) runWritesMulti(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
+	var i = uint32(0)
+	return cmd.runWritesMultiWithSource(db, options, results, func() uint32 { i++; return i })
 }
 
 func (cmd *BenchCommand) runWritesRandom(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
@@ -1445,6 +1452,38 @@ func (cmd *BenchCommand) runWritesWithSource(db *bolt.DB, options *BenchOptions,
 				if err := b.Put(key, value); err != nil {
 					return err
 				}
+			}
+
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (cmd *BenchCommand) runWritesMultiWithSource(db *bolt.DB, options *BenchOptions, results *BenchResults, keySource func() uint32) error {
+	pairs := make([][]byte, options.BatchSize*2)
+
+	results.WriteOps = options.Iterations
+	for i := 0; i < options.Iterations; i += options.BatchSize {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, _ := tx.CreateBucketIfNotExists(benchBucketName, false)
+			b.FillPercent = options.FillPercent
+
+			for j := 0; j < options.BatchSize; j++ {
+				key := make([]byte, options.KeySize)
+				value := make([]byte, options.ValueSize)
+
+				// Write key as uint32.
+				binary.BigEndian.PutUint32(key, keySource())
+
+				pairs[j*2] = key
+				pairs[j*2+1] = value
+			}
+			// Insert key/value.
+			if err := b.MultiPut(pairs...); err != nil {
+				return err
 			}
 
 			return nil
