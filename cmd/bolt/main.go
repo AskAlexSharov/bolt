@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"reflect"
 	"runtime"
 	"runtime/pprof"
 	"strconv"
@@ -63,7 +64,9 @@ var (
 )
 
 // PageHeaderSize represents the size of the bolt.page header.
-const PageHeaderSize = 16
+const PageHeaderSize = unsafe.Sizeof(page{})
+const branchPageElementSize = unsafe.Sizeof(branchPageElement{})
+const leafPageElementSize = unsafe.Sizeof(leafPageElement{})
 
 func main() {
 	m := NewMain()
@@ -764,7 +767,11 @@ func (cmd *PageCommand) PrintFreelist(w io.Writer, buf []byte) error {
 	fmt.Fprintf(w, "\n")
 
 	// Print each page in the freelist.
-	ids := (*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr))
+	ids := *(*[]pgid)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(p)) + PageHeaderSize,
+		Len:  int(p.count),
+		Cap:  int(p.count),
+	}))
 	for i := uint16(0); i < p.count; i++ {
 		fmt.Fprintf(w, "%d\n", ids[i])
 	}
@@ -1895,9 +1902,6 @@ func atois(strs []string) ([]int, error) {
 }
 
 // DO NOT EDIT. Copied from the "bolt" package.
-const maxAllocSize = 0xFFFFFFF
-
-// DO NOT EDIT. Copied from the "bolt" package.
 const (
 	branchPageFlag   = 0x01
 	leafPageFlag     = 0x02
@@ -1929,17 +1933,20 @@ type meta struct {
 
 // DO NOT EDIT. Copied from the "bolt" package.
 type bucket struct {
-	root     pgid
-	sequence uint64
+	root     pgid   // page id of the bucket's root-level page
+	sequence uint64 // monotonically incrementing, used by NextSequence()
+	enum     bool   // whether the bucket needs to support enumeration of leaves
 }
 
 // DO NOT EDIT. Copied from the "bolt" package.
 type page struct {
-	id       pgid
-	flags    uint16
-	count    uint16
-	overflow uint32
-	ptr      uintptr
+	id         pgid
+	flags      uint16
+	count      uint16
+	overflow   uint32
+	prefixpos  uint32
+	prefixsize uint32
+	minsize    uint64
 }
 
 // DO NOT EDIT. Copied from the "bolt" package.
@@ -1958,13 +1965,14 @@ func (p *page) Type() string {
 
 // DO NOT EDIT. Copied from the "bolt" package.
 func (p *page) leafPageElement(index uint16) *leafPageElement {
-	n := &((*[0x7FFFFFF]leafPageElement)(unsafe.Pointer(&p.ptr)))[index]
-	return n
+	off := uintptr(index) * leafPageElementSize
+	return (*leafPageElement)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + PageHeaderSize + off))
 }
 
 // DO NOT EDIT. Copied from the "bolt" package.
 func (p *page) branchPageElement(index uint16) *branchPageElement {
-	return &((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[index]
+	off := uintptr(index) * branchPageElementSize
+	return (*branchPageElement)(unsafe.Pointer(uintptr(unsafe.Pointer(p)) + PageHeaderSize + off))
 }
 
 // DO NOT EDIT. Copied from the "bolt" package.
@@ -1976,8 +1984,11 @@ type branchPageElement struct {
 
 // DO NOT EDIT. Copied from the "bolt" package.
 func (n *branchPageElement) key() []byte {
-	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
-	return buf[n.pos : n.pos+n.ksize]
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(n)) + uintptr(n.pos),
+		Len:  int(n.ksize),
+		Cap:  int(n.ksize),
+	}))
 }
 
 // DO NOT EDIT. Copied from the "bolt" package.
@@ -1990,14 +2001,20 @@ type leafPageElement struct {
 
 // DO NOT EDIT. Copied from the "bolt" package.
 func (n *leafPageElement) key() []byte {
-	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
-	return buf[n.pos : n.pos+n.ksize]
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(n)) + uintptr(n.pos),
+		Len:  int(n.ksize),
+		Cap:  int(n.ksize),
+	}))
 }
 
 // DO NOT EDIT. Copied from the "bolt" package.
 func (n *leafPageElement) value() []byte {
-	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
-	return buf[n.pos+n.ksize : n.pos+n.ksize+n.vsize]
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(n)) + uintptr(n.pos) + uintptr(n.ksize),
+		Len:  int(n.vsize),
+		Cap:  int(n.vsize),
+	}))
 }
 
 // CompactCommand represents the "compact" command execution.
@@ -2112,7 +2129,7 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 		// Create bucket on the root transaction if this is the first level.
 		nk := len(keys)
 		if nk == 0 {
-			bkt, err := tx.CreateBucket(k, false)
+			bkt, err := tx.CreateBucket(cloneBytes(k), false)
 			if err != nil {
 				return err
 			}
@@ -2132,7 +2149,7 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 
 		// If there is no value then this is a bucket call.
 		if v == nil {
-			bkt, err := b.CreateBucket(k, false)
+			bkt, err := b.CreateBucket(cloneBytes(k), false)
 			if err != nil {
 				return err
 			}
@@ -2143,7 +2160,7 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 		}
 
 		// Otherwise treat it as a key/value pair.
-		return b.Put(k, v)
+		return b.Put(cloneBytes(k), cloneBytes(v))
 	}); err != nil {
 		return err
 	}
@@ -2203,4 +2220,11 @@ Additional options include:
 		Specifies the maximum size of individual transactions.
 		Defaults to 64KB.
 `, "\n")
+}
+
+// cloneBytes returns a copy of a given slice.
+func cloneBytes(v []byte) []byte {
+	var clone = make([]byte, len(v))
+	copy(clone, v)
+	return clone
 }

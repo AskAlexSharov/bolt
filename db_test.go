@@ -1494,6 +1494,7 @@ func MustOpenWithOption(o *bolt.Options) *DB {
 	if err != nil {
 		panic(err)
 	}
+	db.StrictMode = true
 	return &DB{
 		DB: db,
 		f:  f,
