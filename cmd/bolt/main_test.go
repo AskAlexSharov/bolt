@@ -408,7 +408,7 @@ func fillBucket(b *bolt.Bucket, prefix []byte) error {
 	}
 	n = 1 + rand.Intn(3)
 	for i := 0; i < n; i++ {
-		k := append(prefix, []byte(fmt.Sprintf("b%d", i))...)
+		k := append(append([]byte{}, prefix...), []byte(fmt.Sprintf("b%d", i))...)
 		sb, err := b.CreateBucket(k, false)
 		if err != nil {
 			return err
