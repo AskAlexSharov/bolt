@@ -310,7 +310,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 	}
 
 	// Insert into node.
-	key = cloneBytes(key)
+	//key = cloneBytes(key)
 	if c.node().put(key, key, value, 0, 0, 0) {
 		// Increment size on all references starting from the top
 		var n = c.stack[0].node
