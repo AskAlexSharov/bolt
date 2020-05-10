@@ -5,14 +5,22 @@ GOLDFLAGS="-X main.branch $(BRANCH) -X main.commit $(COMMIT)"
 default: build
 
 race:
-	@go test -v -race -test.run="TestSimulate_(100op|1000op)"
+	@TEST_FREELIST_TYPE=hashmap go test -v -race -test.run="TestSimulate_(100op|1000op)"
+	@echo "array freelist test"
+	@TEST_FREELIST_TYPE=array go test -v -race -test.run="TestSimulate_(100op|1000op)"
 
 # go get github.com/kisielk/errcheck
 errcheck:
 	@errcheck -ignorepkg=bytes -ignore=os:Remove github.com/ledgerwatch/bolt
 
-test: 
-	@go test -v -cover .
-	@go test -v ./cmd/bolt
+test:
+	@TEST_FREELIST_TYPE=hashmap go test -timeout 20m -v
+	# Note: gets "program not an importable package" in out of path builds
+	@TEST_FREELIST_TYPE=hashmap go test -v ./cmd/bolt
+	@echo "array freelist test"
+	@TEST_FREELIST_TYPE=array go test -timeout 20m -v
+	# Note: gets "program not an importable package" in out of path builds
+	@TEST_FREELIST_TYPE=array go test -v ./cmd/bolt
+
 
 .PHONY: fmt test
