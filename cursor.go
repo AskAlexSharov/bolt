@@ -390,7 +390,7 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 	if newElement {
 		p, n = c.bucket.pageNode(pgid)
 		if p != nil && (p.flags&(branchPageFlag|leafPageFlag)) == 0 {
-			panic(fmt.Sprintf("invalid page type: %d: %x", p.id, p.flags))
+			panic(fmt.Sprintf("invalid page type: %d (pgid %d): %x", p.id, pgid, p.flags))
 		}
 
 		e = &elemRef{pageID: pgid, node: n}
