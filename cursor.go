@@ -390,7 +390,7 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 	if newElement {
 		p, n = c.bucket.pageNode(pgid)
 		if p != nil && (p.flags&(branchPageFlag|leafPageFlag)) == 0 {
-			panic(fmt.Sprintf("invalid page type: %d (pgid %d): %x", p.id, pgid, p.flags))
+			panic(fmt.Sprintf("invalid page type: %d (pgid %d): %x, count %d, key %x", p.id, pgid, p.flags, p.count, key))
 		}
 
 		e = &elemRef{pageID: pgid, node: n}
@@ -436,6 +436,7 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 }
 
 func (c *Cursor) searchPage2(key []byte, p *page) {
+	fmt.Printf("Searching in the page %d\n", p.id)
 	// Binary search for the correct range.
 	inodes := p.branchPageElements()
 
