@@ -205,6 +205,10 @@ func (f *freelist) read(p *page) {
 
 	// Rebuild the page cache.
 	f.reindex()
+	x := f.cache[74366891]
+	if x {
+		fmt.Printf("Page 74366891 in the freelist: %t\n")
+	}
 }
 
 // write writes the page ids onto a freelist page. All free and pending ids are
