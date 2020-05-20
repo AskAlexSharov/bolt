@@ -436,7 +436,6 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 }
 
 func (c *Cursor) searchPage2(key []byte, p *page) {
-	fmt.Printf("Searching in the page %d\n", p.id)
 	// Binary search for the correct range.
 	inodes := p.branchPageElements()
 
@@ -459,6 +458,7 @@ func (c *Cursor) searchPage2(key []byte, p *page) {
 
 // Recursively search to the next page.
 func (c *Cursor) searchPage(key []byte, p *page) {
+	fmt.Printf("Searching in the page %d\n", p.id)
 	isEnum := c.bucket.enum
 	// Binary search for the correct range.
 	var inodes []branchPageElement
