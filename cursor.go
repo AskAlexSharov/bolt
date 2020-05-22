@@ -636,6 +636,7 @@ func (r *elemRef) isLeaf(b *Bucket) bool {
 		p = b.tx.page(r.pageID)
 	}
 
+	_ = p.flags
 	return (p.flags & leafPageFlag) != 0
 }
 
