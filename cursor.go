@@ -300,6 +300,7 @@ func (c *Cursor) first() {
 			}
 		}
 		n := c.bucket.lookupNode(pgid)
+		_ = c.bucket.lookupPage(pgid).flags
 		c.stack = append(c.stack, elemRef{pageID: pgid, node: n, index: 0})
 	}
 }
@@ -625,16 +626,7 @@ func (r *elemRef) isLeaf(b *Bucket) bool {
 		return r.node.isLeaf
 	}
 
-	if b.root == 0 && r.pageID != 0 {
-		panic(fmt.Sprintf("inline bucket non-zero page access(2): %d != 0", r.pageID))
-	}
-
-	var p *page
-	if b.root == 0 {
-		p = b.page
-	} else {
-		p = b.tx.page(r.pageID)
-	}
+	p := b.lookupPage(r.pageID)
 
 	return (p.flags & leafPageFlag) != 0
 }

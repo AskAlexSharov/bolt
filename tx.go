@@ -592,12 +592,10 @@ func (tx *Tx) writeMeta() error {
 // If page has been written to then a temporary buffered page is returned.
 func (tx *Tx) page(id pgid) *page {
 	// Check the dirty pages first.
-	if tx.pages == nil {
-		return tx.db.page(id)
-	}
-
-	if p, ok := tx.pages[id]; ok {
-		return p
+	if tx.pages != nil {
+		if p, ok := tx.pages[id]; ok {
+			return p
+		}
 	}
 
 	// Otherwise return directly from the mmap.
