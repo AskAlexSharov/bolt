@@ -863,7 +863,9 @@ func (db *DB) Info() *Info {
 // page retrieves a page reference from the mmap based on the current page size.
 func (db *DB) page(id pgid) *page {
 	pos := id * pgid(db.pageSize)
-	return (*page)(unsafe.Pointer(&db.data[pos]))
+	p := (*page)(unsafe.Pointer(&db.data[pos]))
+	_ = p.flags
+	return p
 }
 
 // pageInBuffer retrieves a page reference from a given byte array based on the current page size.
