@@ -624,7 +624,18 @@ func (r *elemRef) isLeaf(b *Bucket) bool {
 	if r.node != nil {
 		return r.node.isLeaf
 	}
-	p := b.lookupPage(r.pageID)
+
+	if b.root == 0 && r.pageID != 0 {
+		panic(fmt.Sprintf("inline bucket non-zero page access(2): %d != 0", r.pageID))
+	}
+
+	var p *page
+	if b.root == 0 {
+		p = b.page
+	} else {
+		p = b.tx.page(r.pageID)
+	}
+
 	return (p.flags & leafPageFlag) != 0
 }
 

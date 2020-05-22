@@ -902,12 +902,14 @@ func (b *Bucket) lookupNode(id pgid) *node {
 // If the bucket is an inline bucket, it returns
 // its fake page regardless of the argument id
 func (b *Bucket) lookupPage(id pgid) *page {
+	if b.root == 0 && id != 0 {
+		panic(fmt.Sprintf("inline bucket non-zero page access(2): %d != 0", id))
+	}
+
 	if b.root == 0 {
-		if id != 0 {
-			panic(fmt.Sprintf("inline bucket non-zero page access(2): %d != 0", id))
-		}
 		return b.page
 	}
+
 	return b.tx.page(id)
 }
 
