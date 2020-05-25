@@ -7,8 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"runtime/debug"
-	"strings"
+	"sort"
 	"sync"
 	"time"
 	"unsafe"
@@ -22,6 +21,8 @@ const version = 3
 
 // Represents a marker value to indicate that a file is a Bolt DB.
 const magic uint32 = 0xED0CDAED
+
+const pgidNoFreelist pgid = 0xffffffffffffffff
 
 // IgnoreNoSync specifies whether the NoSync field of a DB is ignored when
 // syncing changes to a file.  This is required as some operating systems,
@@ -41,6 +42,16 @@ var defaultPageSize = os.Getpagesize()
 
 // The time elapsed between consecutive file locking attempts.
 const flockRetryTimeout = 50 * time.Millisecond
+
+// FreelistType is the type of the freelist backend
+type FreelistType string
+
+const (
+	// FreelistArrayType indicates backend freelist type is array
+	FreelistArrayType = FreelistType("array")
+	// FreelistMapType indicates backend freelist type is hashmap
+	FreelistMapType = FreelistType("hashmap")
+)
 
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
@@ -64,6 +75,17 @@ type DB struct {
 	// THIS IS UNSAFE. PLEASE USE WITH CAUTION.
 	NoSync bool
 
+	// When true, skips syncing freelist to disk. This improves the database
+	// write performance under normal operation, but requires a full database
+	// re-sync during recovery.
+	NoFreelistSync bool
+
+	// FreelistType sets the backend freelist type. There are two options. Array which is simple but endures
+	// dramatic performance degradation if database is large and framentation in freelist is common.
+	// The alternative one is using hashmap, it is faster in almost all circumstances
+	// but it doesn't guarantee that it offers the smallest page id available. In normal case it is safe.
+	// The default type is array
+	FreelistType FreelistType
 	// When true, skips the truncate call when growing the database.
 	// Setting this to true is only safe on non-ext3/ext4 systems.
 	// Skipping truncation avoids preallocation of hard drive space and
@@ -121,10 +143,11 @@ type DB struct {
 	pageSize int
 	rwtx     *Tx
 	txs      []*Tx
-	freelist *freelist
 	stats    Stats
 
-	pagePool sync.Pool
+	freelist     *freelist
+	freelistLoad sync.Once
+	pagePool     sync.Pool
 
 	batchMu sync.Mutex
 	batch   *batch
@@ -164,10 +187,13 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	if options == nil {
 		options = DefaultOptions
 	}
+	db.NoSync = options.NoSync
 	db.NoGrowSync = options.NoGrowSync
 	db.MmapFlags = options.MmapFlags
 	db.KeysPrefixCompressionDisable = options.KeysPrefixCompressionDisable
 	db.memOnly = options.MemOnly
+	db.NoFreelistSync = options.NoFreelistSync
+	db.FreelistType = options.FreelistType
 
 	// Set default values for later DB operations.
 	db.MaxBatchSize = DefaultMaxBatchSize
@@ -259,12 +285,48 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		return nil, err
 	}
 
-	// Read in the freelist.
-	db.freelist = newFreelist()
-	db.freelist.read(db.page(db.meta().freelist))
+	if db.readOnly {
+		return db, nil
+	}
+
+	db.loadFreelist()
+
+	// Flush freelist when transitioning from no sync to sync so
+	// NoFreelistSync unaware boltdb can open the db later.
+	if !db.NoFreelistSync && !db.hasSyncedFreelist() {
+		tx, err := db.Begin(true)
+		if tx != nil {
+			err = tx.Commit()
+		}
+		if err != nil {
+			_ = db.close()
+			return nil, err
+		}
+	}
 
 	// Mark the database as opened and return.
 	return db, nil
+}
+
+// loadFreelist reads the freelist if it is synced, or reconstructs it
+// by scanning the DB if it is not synced. It assumes there are no
+// concurrent accesses being made to the freelist.
+func (db *DB) loadFreelist() {
+	db.freelistLoad.Do(func() {
+		db.freelist = newFreelist(db.FreelistType)
+		if !db.hasSyncedFreelist() {
+			// Reconstruct free list by scanning the DB.
+			db.freelist.readIDs(db.freepages())
+		} else {
+			// Read free list from freelist page.
+			db.freelist.read(db.page(db.meta().freelist))
+		}
+		db.stats.FreePageN = db.freelist.free_count()
+	})
+}
+
+func (db *DB) hasSyncedFreelist() bool {
+	return db.meta().freelist != pgidNoFreelist
 }
 
 // mmap opens the underlying memory-mapped file and initializes the meta references.
@@ -579,20 +641,35 @@ func (db *DB) beginRWTx() (*Tx, error) {
 	t := &Tx{writable: true}
 	t.init(db)
 	db.rwtx = t
+	db.freePages()
+	return t, nil
+}
 
-	// Free any pages associated with closed read-only transactions.
-	var minid txid = 0xFFFFFFFFFFFFFFFF
-	for _, t := range db.txs {
-		if t.meta.txid < minid {
-			minid = t.meta.txid
-		}
+// freePages releases any pages associated with closed read-only transactions.
+func (db *DB) freePages() {
+	// Free all pending pages prior to earliest open transaction.
+	sort.Sort(txsById(db.txs))
+	minid := txid(0xFFFFFFFFFFFFFFFF)
+	if len(db.txs) > 0 {
+		minid = db.txs[0].meta.txid
 	}
 	if minid > 0 {
 		db.freelist.release(minid - 1)
 	}
-
-	return t, nil
+	// Release unused txid extents.
+	for _, t := range db.txs {
+		db.freelist.releaseRange(minid, t.meta.txid-1)
+		minid = t.meta.txid + 1
+	}
+	db.freelist.releaseRange(minid, txid(0xFFFFFFFFFFFFFFFF))
+	// Any page both allocated and freed in an extent is safe to release.
 }
+
+type txsById []*Tx
+
+func (t txsById) Len() int           { return len(t) }
+func (t txsById) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+func (t txsById) Less(i, j int) bool { return t[i].meta.txid < t[j].meta.txid }
 
 // removeTx removes a transaction from the database.
 func (db *DB) removeTx(tx *Tx) {
@@ -896,7 +973,7 @@ func (db *DB) meta() *meta {
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
-func (db *DB) allocate(count int) (*page, error) {
+func (db *DB) allocate(txid txid, count int) (*page, error) {
 	// Allocate a temporary buffer for the page.
 	var buf []byte
 	if count == 1 {
@@ -908,7 +985,7 @@ func (db *DB) allocate(count int) (*page, error) {
 	p.overflow = uint32(count - 1)
 
 	// Use pages from the freelist if they are available.
-	if p.id = db.freelist.allocate(count); p.id != 0 {
+	if p.id = db.freelist.allocate(txid, count); p.id != 0 {
 		return p, nil
 	}
 
@@ -967,6 +1044,38 @@ func (db *DB) IsReadOnly() bool {
 	return db.readOnly
 }
 
+func (db *DB) freepages() []pgid {
+	tx, err := db.beginTx()
+	defer func() {
+		err = tx.Rollback()
+		if err != nil {
+			panic("freepages: failed to rollback tx")
+		}
+	}()
+	if err != nil {
+		panic("freepages: failed to open read only tx")
+	}
+
+	reachable := make(map[pgid]*page)
+	nofreed := make(map[pgid]bool)
+	ech := make(chan error)
+	go func() {
+		for e := range ech {
+			panic(fmt.Sprintf("freepages: failed to get all reachable pages (%v)", e))
+		}
+	}()
+	tx.checkBucket(&tx.root, reachable, nofreed, ech)
+	close(ech)
+
+	var fids []pgid
+	for i := pgid(2); i < db.meta().pgid; i++ {
+		if _, ok := reachable[i]; !ok {
+			fids = append(fids, i)
+		}
+	}
+	return fids
+}
+
 // Options represents the options that can be set when opening a database.
 type Options struct {
 	// Timeout is the amount of time to wait to obtain a file lock.
@@ -977,6 +1086,16 @@ type Options struct {
 	// Sets the DB.NoGrowSync flag before memory mapping the file.
 	NoGrowSync bool
 
+	// Do not sync freelist to disk. This improves the database write performance
+	// under normal operation, but requires a full database re-sync during recovery.
+	NoFreelistSync bool
+
+	// FreelistType sets the backend freelist type. There are two options. Array which is simple but endures
+	// dramatic performance degradation if database is large and framentation in freelist is common.
+	// The alternative one is using hashmap, it is faster in almost all circumstances
+	// but it doesn't guarantee that it offers the smallest page id available. In normal case it is safe.
+	// The default type is array
+	FreelistType FreelistType
 	// Open database in read-only mode. Uses flock(..., LOCK_SH |LOCK_NB) to
 	// grab a shared lock (UNIX).
 	ReadOnly bool
@@ -999,6 +1118,11 @@ type Options struct {
 	// If initialMmapSize is smaller than the previous database size,
 	// it takes no effect.
 	InitialMmapSize int
+
+	// NoSync sets the initial value of DB.NoSync. Normally this can just be
+	// set directly on the DB itself when returned from Open(), but this option
+	// is useful in APIs which expose Options but not the underlying DB.
+	NoSync bool
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().
@@ -1007,6 +1131,7 @@ var DefaultOptions = &Options{
 	Timeout:                      0,
 	NoGrowSync:                   false,
 	KeysPrefixCompressionDisable: false,
+	FreelistType:                 FreelistArrayType,
 }
 
 // Stats represents statistics about the database.
@@ -1083,7 +1208,8 @@ func (m *meta) copy(dest *meta) {
 func (m *meta) write(p *page) {
 	if m.root.root >= m.pgid {
 		panic(fmt.Sprintf("root bucket pgid (%d) above high water mark (%d)", m.root.root, m.pgid))
-	} else if m.freelist >= m.pgid {
+	} else if m.freelist >= m.pgid && m.freelist != pgidNoFreelist {
+		// TODO: reject pgidNoFreeList if !NoFreelistSync
 		panic(fmt.Sprintf("freelist pgid (%d) above high water mark (%d)", m.freelist, m.pgid))
 	}
 
@@ -1109,12 +1235,4 @@ func _assert(condition bool, msg string, v ...interface{}) {
 	if !condition {
 		panic(fmt.Sprintf("assertion failed: "+msg, v...))
 	}
-}
-
-func warn(v ...interface{})              { fmt.Fprintln(os.Stderr, v...) }
-func warnf(msg string, v ...interface{}) { fmt.Fprintf(os.Stderr, msg+"\n", v...) }
-
-func printstack() {
-	stack := strings.Join(strings.Split(string(debug.Stack()), "\n")[2:], "\n")
-	fmt.Fprintln(os.Stderr, stack)
 }

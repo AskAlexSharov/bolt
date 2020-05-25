@@ -9,11 +9,10 @@ import (
 	"hash/fnv"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -46,6 +45,7 @@ type meta struct {
 // Ensure that a database can be opened without error.
 func TestOpen(t *testing.T) {
 	path := tempfile()
+	defer os.RemoveAll(path)
 	db, err := bolt.Open(path, 0666, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +122,7 @@ func TestOpen_ErrNotExists(t *testing.T) {
 // Ensure that opening a file that is not a Bolt database returns ErrInvalid.
 func TestOpen_ErrInvalid(t *testing.T) {
 	path := tempfile()
+	defer os.RemoveAll(path)
 
 	f, err := os.Create(path)
 	if err != nil {
@@ -133,7 +134,6 @@ func TestOpen_ErrInvalid(t *testing.T) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(path)
 
 	if _, err := bolt.Open(path, 0666, nil); err != bolt.ErrInvalid {
 		t.Fatalf("unexpected error: %s", err)
@@ -294,7 +294,7 @@ func TestOpen_Size_Large(t *testing.T) {
 		if err := db.Batch(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
 			for j := 0; j < 100; j++ {
-				var v = make([]byte, 1_000_000)
+				var v = make([]byte, 10_000)
 				if err := b.Put(u64tob(index), v); err != nil {
 					t.Fatal(err)
 				}
@@ -313,7 +313,7 @@ func TestOpen_Size_Large(t *testing.T) {
 	sz := fileSize(path)
 	if sz == 0 {
 		t.Fatalf("unexpected new file size: %d", sz)
-	} else if sz < (1 << 30) {
+	} else if sz < (1 << 26) {
 		t.Fatalf("expected larger initial size: %d", sz)
 	}
 
@@ -346,6 +346,7 @@ func TestOpen_Size_Large(t *testing.T) {
 // Ensure that a re-opened database is consistent.
 func TestOpen_Check(t *testing.T) {
 	path := tempfile()
+	defer os.RemoveAll(path)
 
 	db, err := bolt.Open(path, 0666, nil)
 	if err != nil {
@@ -378,6 +379,7 @@ func TestOpen_MetaInitWriteError(t *testing.T) {
 // Ensure that a database that is too small returns an error.
 func TestOpen_FileTooSmall(t *testing.T) {
 	path := tempfile()
+	defer os.RemoveAll(path)
 
 	db, err := bolt.Open(path, 0666, nil)
 	if err != nil {
@@ -512,6 +514,74 @@ func TestDB_Open_ReadOnly(t *testing.T) {
 	}
 }
 
+// TestOpen_RecoverFreeList tests opening the DB with free-list
+// write-out after no free list sync will recover the free list
+// and write it out.
+func TestOpen_RecoverFreeList(t *testing.T) {
+	db := MustOpenWithOption(&bolt.Options{NoFreelistSync: true})
+	defer db.MustClose()
+
+	// Write some pages.
+	tx, err := db.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wbuf := make([]byte, 8192)
+	for i := 0; i < 100; i++ {
+		s := fmt.Sprintf("%d", i)
+		b, err := tx.CreateBucket([]byte(s), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = b.Put([]byte(s), wbuf); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Generate free pages.
+	if tx, err = db.Begin(true); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		s := fmt.Sprintf("%d", i)
+		b := tx.Bucket([]byte(s))
+		if b == nil {
+			t.Fatal(err)
+		}
+		if err := b.Delete([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Record freelist count from opening with NoFreelistSync.
+	db.MustReopen()
+	freepages := db.Stats().FreePageN
+	if freepages == 0 {
+		t.Fatalf("no free pages on NoFreelistSync reopen")
+	}
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check free page count is reconstructed when opened with freelist sync.
+	db.o = &bolt.Options{}
+	db.MustReopen()
+	// One less free page for syncing the free list on open.
+	freepages--
+	if fp := db.Stats().FreePageN; fp < freepages {
+		t.Fatalf("closed with %d free pages, opened with %d", freepages, fp)
+	}
+}
+
 // Ensure that a database cannot open a transaction when it's not open.
 func TestDB_Begin_ErrDatabaseNotOpen(t *testing.T) {
 	var db bolt.DB
@@ -543,6 +613,65 @@ func TestDB_BeginRW(t *testing.T) {
 	}
 }
 
+// TestDB_Concurrent_WriteTo checks that issuing WriteTo operations concurrently
+// with commits does not produce corrupted db files.
+func TestDB_Concurrent_WriteTo(t *testing.T) {
+	o := &bolt.Options{NoFreelistSync: false}
+	db := MustOpenWithOption(o)
+	defer db.MustClose()
+
+	var wg sync.WaitGroup
+	wtxs, rtxs := 5, 5
+	wg.Add(wtxs * rtxs)
+	f := func(tx *bolt.Tx) {
+		defer wg.Done()
+		f, err := ioutil.TempFile("", "bolt-")
+		if err != nil {
+			panic(err)
+		}
+		time.Sleep(time.Duration(rand.Intn(20)+1) * time.Millisecond)
+		tx.WriteTo(f)
+		tx.Rollback()
+		f.Close()
+		snap := &DB{nil, f.Name(), o}
+		snap.MustReopen()
+		defer snap.MustClose()
+		snap.MustCheck()
+	}
+
+	tx1, err := db.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx1.CreateBucket([]byte("abc"), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx1.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < wtxs; i++ {
+		tx, err := db.Begin(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Bucket([]byte("abc")).Put([]byte{0}, []byte{0}); err != nil {
+			t.Fatal(err)
+		}
+		for j := 0; j < rtxs; j++ {
+			rtx, rerr := db.Begin(false)
+			if rerr != nil {
+				t.Fatal(rerr)
+			}
+			go f(rtx)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wg.Wait()
+}
+
 // Ensure that opening a transaction while the DB is closed returns an error.
 func TestDB_BeginRW_Closed(t *testing.T) {
 	var db bolt.DB
@@ -565,25 +694,21 @@ func testDB_Close_PendingTx(t *testing.T, writable bool) {
 		t.Fatal(err)
 	}
 
-	errs := make(chan error, 1) // use a channel to hand off the error
 	// Open update in separate goroutine.
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		defer close(errs)
-		if err := db.Close(); err != nil {
-			errs <- err
-			return
-		}
-		close(done)
+		err := db.Close()
+		done <- err
 	}()
 
 	// Ensure database hasn't closed.
 	time.Sleep(100 * time.Millisecond)
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Errorf("error from inside goroutine: %v", err)
+		}
 		t.Fatal("database closed too early")
-	case err := <-errs:
-		t.Fatal(err)
 	default:
 	}
 
@@ -600,7 +725,10 @@ func testDB_Close_PendingTx(t *testing.T, writable bool) {
 	// Ensure database closed now.
 	time.Sleep(100 * time.Millisecond)
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("error from inside goroutine: %v", err)
+		}
 	default:
 		t.Fatal("database did not close")
 	}
@@ -1393,8 +1521,8 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		start := make(chan struct{})
 		var wg sync.WaitGroup
+		errCh := make(chan error, 10)
 
-		errs := make(chan error, 10*10) // use a channel to hand off the error
 		for major := 0; major < 10; major++ {
 			wg.Add(1)
 			go func(id uint32) {
@@ -1405,7 +1533,7 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 					h := fnv.New32a()
 					buf := make([]byte, 4)
 					for minor := uint32(0); minor < 100; minor++ {
-						binary.LittleEndian.PutUint32(buf, id*100+minor)
+						binary.LittleEndian.PutUint32(buf, uint32(id*100+minor))
 						h.Reset()
 						_, _ = h.Write(buf[:])
 						k := h.Sum(nil)
@@ -1416,16 +1544,14 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 					}
 					return nil
 				}
-				if err := db.Update(insert100); err != nil {
-					errs <- err
-					return
-				}
+				err := db.Update(insert100)
+				errCh <- err
 			}(uint32(major))
 		}
 		close(start)
 		wg.Wait()
-		close(errs)
-		for err := range errs {
+		close(errCh)
+		for err := range errCh {
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1490,6 +1616,11 @@ func MustOpenWithOption(o *bolt.Options) *DB {
 		o = bolt.DefaultOptions
 	}
 
+	freelistType := bolt.FreelistArrayType
+	if env := os.Getenv(bolt.TestFreelistType); env == string(bolt.FreelistMapType) {
+		freelistType = bolt.FreelistMapType
+	}
+	o.FreelistType = freelistType
 	db, err := bolt.Open(f, 0666, o)
 	if err != nil {
 		panic(err)
@@ -1612,40 +1743,6 @@ func tempfile() string {
 	return f.Name()
 }
 
-// mustContainKeys checks that a bucket contains a given set of keys.
-func mustContainKeys(b *bolt.Bucket, m map[string]string) {
-	found := make(map[string]string)
-	if err := b.ForEach(func(k, _ []byte) error {
-		found[string(k)] = ""
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-
-	// Check for keys found in bucket that shouldn't be there.
-	var keys []string
-	for k, _ := range found {
-		if _, ok := m[string(k)]; !ok {
-			keys = append(keys, k)
-		}
-	}
-	if len(keys) > 0 {
-		sort.Strings(keys)
-		panic(fmt.Sprintf("keys found(%d): %s", len(keys), strings.Join(keys, ",")))
-	}
-
-	// Check for keys not found in bucket that should be there.
-	for k, _ := range m {
-		if _, ok := found[string(k)]; !ok {
-			keys = append(keys, k)
-		}
-	}
-	if len(keys) > 0 {
-		sort.Strings(keys)
-		panic(fmt.Sprintf("keys not found(%d): %s", len(keys), strings.Join(keys, ",")))
-	}
-}
-
 func trunc(b []byte, length int) []byte {
 	if length < len(b) {
 		return b[:length]
@@ -1664,7 +1761,6 @@ func fileSize(path string) int64 {
 	}
 	return fi.Size()
 }
-
 
 // u64tob converts a uint64 into an 8-byte slice.
 func u64tob(v uint64) []byte {

@@ -659,6 +659,162 @@ func TestTx_CopyFile_Error_Normal(t *testing.T) {
 	}
 }
 
+// TestTx_Rollback ensures there is no error when tx rollback whether we sync freelist or not.
+func TestTx_Rollback(t *testing.T) {
+	for _, isSyncFreelist := range []bool{false, true} {
+		// Open the database.
+		db, err := bolt.Open(tempfile(), 0666, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer os.Remove(db.Path())
+		db.NoFreelistSync = isSyncFreelist
+
+		tx, err := db.Begin(true)
+		if err != nil {
+			t.Fatalf("Error starting tx: %v", err)
+		}
+		bucket := []byte("mybucket")
+		if _, err := tx.CreateBucket(bucket, false); err != nil {
+			t.Fatalf("Error creating bucket: %v", err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("Error on commit: %v", err)
+		}
+
+		tx, err = db.Begin(true)
+		if err != nil {
+			t.Fatalf("Error starting tx: %v", err)
+		}
+		b := tx.Bucket(bucket)
+		if err := b.Put([]byte("k"), []byte("v")); err != nil {
+			t.Fatalf("Error on put: %v", err)
+		}
+		// Imagine there is an error and tx needs to be rolled-back
+		if err := tx.Rollback(); err != nil {
+			t.Fatalf("Error on rollback: %v", err)
+		}
+
+		tx, err = db.Begin(false)
+		if err != nil {
+			t.Fatalf("Error starting tx: %v", err)
+		}
+		b = tx.Bucket(bucket)
+		if v, _ := b.Get([]byte("k")); v != nil {
+			t.Fatalf("Value for k should not have been stored")
+		}
+		if err := tx.Rollback(); err != nil {
+			t.Fatalf("Error on rollback: %v", err)
+		}
+
+	}
+}
+
+// TestTx_releaseRange ensures db.freePages handles page releases
+// correctly when there are transaction that are no longer reachable
+// via any read/write transactions and are "between" ongoing read
+// transactions, which requires they must be freed by
+// freelist.releaseRange.
+func TestTx_releaseRange(t *testing.T) {
+	// Set initial mmap size well beyond the limit we will hit in this
+	// test, since we are testing with long running read transactions
+	// and will deadlock if db.grow is triggered.
+	db := MustOpenWithOption(&bolt.Options{InitialMmapSize: os.Getpagesize() * 100})
+	defer db.MustClose()
+
+	bucket := "bucket"
+
+	put := func(key, value string) {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucketIfNotExists([]byte(bucket), false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return b.Put([]byte(key), []byte(value))
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	del := func(key string) {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucketIfNotExists([]byte(bucket), false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return b.Delete([]byte(key))
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	getWithTxn := func(txn *bolt.Tx, key string) []byte {
+		v, _ := txn.Bucket([]byte(bucket)).Get([]byte(key))
+		return v
+	}
+
+	openReadTxn := func() *bolt.Tx {
+		readTx, err := db.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return readTx
+	}
+
+	checkWithReadTxn := func(txn *bolt.Tx, key string, wantValue []byte) {
+		value := getWithTxn(txn, key)
+		if !bytes.Equal(value, wantValue) {
+			t.Errorf("Wanted value to be %s for key %s, but got %s", wantValue, key, string(value))
+		}
+	}
+
+	rollback := func(txn *bolt.Tx) {
+		if err := txn.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	put("k1", "v1")
+	rtx1 := openReadTxn()
+	put("k2", "v2")
+	hold1 := openReadTxn()
+	put("k3", "v3")
+	hold2 := openReadTxn()
+	del("k3")
+	rtx2 := openReadTxn()
+	del("k1")
+	hold3 := openReadTxn()
+	del("k2")
+	hold4 := openReadTxn()
+	put("k4", "v4")
+	hold5 := openReadTxn()
+
+	// Close the read transactions we established to hold a portion of the pages in pending state.
+	rollback(hold1)
+	rollback(hold2)
+	rollback(hold3)
+	rollback(hold4)
+	rollback(hold5)
+
+	// Execute a write transaction to trigger a releaseRange operation in the db
+	// that will free multiple ranges between the remaining open read transactions, now that the
+	// holds have been rolled back.
+	put("k4", "v4")
+
+	// Check that all long running reads still read correct values.
+	checkWithReadTxn(rtx1, "k1", []byte("v1"))
+	checkWithReadTxn(rtx2, "k2", []byte("v2"))
+	rollback(rtx1)
+	rollback(rtx2)
+
+	// Check that the final state is correct.
+	rtx7 := openReadTxn()
+	checkWithReadTxn(rtx7, "k1", nil)
+	checkWithReadTxn(rtx7, "k2", nil)
+	checkWithReadTxn(rtx7, "k3", nil)
+	checkWithReadTxn(rtx7, "k4", []byte("v4"))
+	rollback(rtx7)
+}
 func ExampleTx_Rollback() {
 	// Open the database.
 	db, err := bolt.Open(tempfile(), 0666, nil)
