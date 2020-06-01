@@ -943,8 +943,7 @@ func (db *DB) Stats() Stats {
 func (db *DB) WriteStats() (map[string]WriteStats, error) {
 	stats := map[string]WriteStats{}
 	if err := db.View(func(tx *Tx) error {
-		b := tx.Bucket(StatsBucket)
-		return b.ForEach(func(k, v []byte) error {
+		return tx.Bucket(StatsBucket).ForEach(func(k, v []byte) error {
 			stats[string(k)] = UnmarshalWriteStats(v)
 			return nil
 		})

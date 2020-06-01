@@ -31,7 +31,6 @@ type Tx struct {
 	root           Bucket
 	pages          map[pgid]*page
 	stats          TxStats
-	storedStats    WriteStats
 	commitHandlers []func()
 
 	// WriteFlag specifies the flag for write-related methods like WriteTo().
@@ -101,19 +100,14 @@ func (tx *Tx) Stats() TxStats {
 // Returns nil if the bucket does not exist.
 // The bucket instance is only valid for the lifetime of the transaction.
 func (tx *Tx) Bucket(name []byte) *Bucket {
-	b := tx.root.Bucket(name)
-	return b
+	return tx.root.Bucket(name)
 }
 
 // CreateBucket creates a new bucket.
 // Returns an error if the bucket already exists, if the bucket name is blank, or if the bucket name is too long.
 // The bucket instance is only valid for the lifetime of the transaction.
 func (tx *Tx) CreateBucket(name []byte, enum bool) (*Bucket, error) {
-	b, err := tx.root.CreateBucket(name, enum)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
+	return tx.root.CreateBucket(name, enum)
 }
 
 // CreateBucketIfNotExists creates a new bucket if it doesn't already exist.
@@ -153,27 +147,6 @@ func (tx *Tx) Commit() error {
 	} else if !tx.writable {
 		return ErrTxNotWritable
 	}
-	//if tx.writable {
-	//	marshaled := map[string][]byte{}
-	//	statsBucket := tx.Bucket(StatsBucket)
-	//
-	//	tx.db.statlock.Lock()
-	//	for name, stats := range tx.WriteStats {
-	//		if dbStats, ok := tx.db.stats.WriteStats[name]; ok {
-	//			dbStats.add(stats)
-	//			marshaled[name] = dbStats.MarshalBinary(nil)
-	//		} else {
-	//			tx.db.stats.WriteStats[name] = *stats
-	//			marshaled[name] = stats.MarshalBinary(nil)
-	//		}
-	//	}
-	//	tx.db.statlock.Unlock()
-	//	for name, val := range marshaled {
-	//		if err := statsBucket.Put([]byte(name), val); err != nil {
-	//			return err
-	//		}
-	//	}
-	//}
 
 	if tx.writable {
 		statsBucket := tx.Bucket(StatsBucket)
