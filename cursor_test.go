@@ -158,13 +158,6 @@ func TestCursor_SeekTo(t *testing.T) {
 			t.Fatalf("expected nil value: %v", v)
 		}
 
-		// Can seek back
-		if k, v := c.SeekTo([]byte{3, 4}); !bytes.Equal(k, []byte{253, 118}) {
-			t.Fatalf("unexpected key: %v", k)
-		} else if !bytes.Equal(v, []byte{253, 118}) {
-			t.Fatalf("unexpected value: %v", v)
-		}
-
 		return nil
 	}); err != nil {
 		t.Fatal(err)

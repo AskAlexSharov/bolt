@@ -1130,7 +1130,7 @@ type Options struct {
 var DefaultOptions = &Options{
 	Timeout:                      0,
 	NoGrowSync:                   false,
-	KeysPrefixCompressionDisable: false,
+	KeysPrefixCompressionDisable: true,
 	FreelistType:                 FreelistArrayType,
 }
 
