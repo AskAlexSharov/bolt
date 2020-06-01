@@ -181,24 +181,6 @@ func (tx *Tx) Commit() error {
 		}
 	}
 
-	//if tx.writable {
-	//	statsBucket := tx.Bucket(StatsBucket)
-	//	for name, bucket := range tx.root.buckets {
-	//		stats := bucket.writeStats
-	//		var marshaled []byte
-	//		var dbStats WriteStats
-	//		v, _ := statsBucket.Get([]byte(name))
-	//		if v == nil {
-	//			dbStats = WriteStats{}
-	//		}
-	//		dbStats.add(stats)
-	//		marshaled = dbStats.MarshalBinary(nil)
-	//		if err := statsBucket.Put([]byte(name), marshaled); err != nil {
-	//			return err
-	//		}
-	//	}
-	//}
-
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
 
 	// Rebalance nodes which have had deletions.
