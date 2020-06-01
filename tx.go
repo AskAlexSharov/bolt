@@ -39,7 +39,7 @@ type Tx struct {
 	// By default, the flag is unset, which works well for mostly in-memory
 	// workloads. For databases that are much larger than available RAM,
 	// set the flag to syscall.O_DIRECT to avoid trashing the page cache.
-	WriteFlag  int
+	WriteFlag int
 }
 
 // init initializes the transaction.
@@ -149,23 +149,55 @@ func (tx *Tx) Commit() error {
 	}
 
 	if tx.writable {
+		marshaled := map[string][]byte{}
 		statsBucket := tx.Bucket(StatsBucket)
+		var dbStats *WriteStats
+		var ok bool
+
+		tx.db.writestatlock.Lock()
 		for name, bucket := range tx.root.buckets {
-			stats := bucket.writeStats
-			var marshaled []byte
-			v, _ := statsBucket.Get([]byte(name))
-			if v == nil {
-				marshaled = stats.MarshalBinary(nil)
-			} else {
-				dbStats := UnmarshalWriteStats(v)
-				dbStats.add(stats)
-				marshaled = dbStats.MarshalBinary(nil)
+			if dbStats, ok = tx.db.writeStats[name]; !ok {
+				dbStats = &WriteStats{}
+				tx.db.writeStats[name] = dbStats
 			}
-			if err := statsBucket.Put([]byte(name), marshaled); err != nil {
+			dbStats.add(bucket.writeStats)
+		}
+		tx.db.writestatlock.Unlock()
+
+		tx.db.writestatlock.RLock()
+		for name, _ := range tx.root.buckets {
+			marshaled[name] = tx.db.writeStats[name].MarshalBinary(nil)
+		}
+		tx.db.writestatlock.RUnlock()
+
+		for name, val := range marshaled {
+			if err := statsBucket.Put([]byte(name), val); err != nil {
 				return err
 			}
 		}
+
+		for _, bucket := range tx.root.buckets {
+			bucket.writeStats.reset()
+		}
 	}
+
+	//if tx.writable {
+	//	statsBucket := tx.Bucket(StatsBucket)
+	//	for name, bucket := range tx.root.buckets {
+	//		stats := bucket.writeStats
+	//		var marshaled []byte
+	//		var dbStats WriteStats
+	//		v, _ := statsBucket.Get([]byte(name))
+	//		if v == nil {
+	//			dbStats = WriteStats{}
+	//		}
+	//		dbStats.add(stats)
+	//		marshaled = dbStats.MarshalBinary(nil)
+	//		if err := statsBucket.Put([]byte(name), marshaled); err != nil {
+	//			return err
+	//		}
+	//	}
+	//}
 
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
 
@@ -768,8 +800,7 @@ func (s *TxStats) Sub(other *TxStats) TxStats {
 	return diff
 }
 
-// WriteStats represents statistics about buckets - updated on each transaction.
-// In bucket object - it stores transaction-time stats, in DB object: all-time.
+// WriteStats represents all-time statistics about bucket - updated on each transaction.
 type WriteStats struct {
 	KeyN             uint64 // total number of keys
 	KeyBytesN        uint64 // total number of bytes owned by keys
@@ -780,14 +811,35 @@ type WriteStats struct {
 	TotalBytesDelete uint64
 }
 
-func (s *WriteStats) add(other *WriteStats) {
-	s.KeyN += other.KeyN
-	s.KeyBytesN += other.KeyBytesN
-	s.ValueBytesN += other.ValueBytesN
-	s.TotalPut += other.TotalPut
-	s.TotalDelete += other.TotalDelete
-	s.TotalBytesPut += other.TotalBytesPut
-	s.TotalBytesDelete += other.TotalBytesDelete
+// WriteStatsDelta is similar to WriteStats, but can hold negative values.
+type WriteStatsDelta struct {
+	KeyN             int
+	KeyBytesN        int
+	ValueBytesN      int
+	TotalPut         int
+	TotalDelete      int
+	TotalBytesPut    int
+	TotalBytesDelete int
+}
+
+func (s *WriteStatsDelta) reset() {
+	s.KeyN = 0
+	s.KeyBytesN = 0
+	s.ValueBytesN = 0
+	s.TotalPut = 0
+	s.TotalDelete = 0
+	s.TotalBytesPut += 0
+	s.TotalBytesDelete = 0
+}
+
+func (s *WriteStats) add(other *WriteStatsDelta) {
+	s.KeyN = uint64(int(s.KeyN) + other.KeyN)
+	s.KeyBytesN = uint64(int(s.KeyBytesN) + other.KeyBytesN)
+	s.ValueBytesN = uint64(int(s.ValueBytesN) + other.ValueBytesN)
+	s.TotalPut = uint64(int(s.TotalPut) + other.TotalPut)
+	s.TotalDelete = uint64(int(s.TotalDelete) + other.TotalDelete)
+	s.TotalBytesPut = uint64(int(s.TotalBytesPut) + other.TotalBytesPut)
+	s.TotalBytesDelete = uint64(int(s.TotalBytesDelete) + other.TotalBytesDelete)
 }
 
 func (s *WriteStats) Sub(other *WriteStats) WriteStats {

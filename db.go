@@ -144,6 +144,7 @@ type DB struct {
 	rwtx     *Tx
 	txs      []*Tx
 	stats    Stats
+	writeStats map[string]*WriteStats
 
 	freelist     *freelist
 	freelistLoad sync.Once
@@ -152,10 +153,11 @@ type DB struct {
 	batchMu sync.Mutex
 	batch   *batch
 
-	rwlock   sync.Mutex   // Allows only one writer at a time.
-	metalock sync.Mutex   // Protects meta page access.
-	mmaplock sync.RWMutex // Protects mmap access during remapping.
-	statlock sync.RWMutex // Protects stats access.
+	rwlock        sync.Mutex   // Allows only one writer at a time.
+	metalock      sync.Mutex   // Protects meta page access.
+	mmaplock      sync.RWMutex // Protects mmap access during remapping.
+	statlock      sync.RWMutex // Protects stats access.
+	writestatlock sync.RWMutex // Protects writeStats access.
 
 	ops struct {
 		writeAt func(b []byte, off int64) (n int, err error)
@@ -306,8 +308,16 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	if !db.readOnly {
 		if err := db.Update(func(tx *Tx) error {
-			_, err2 := tx.CreateBucketIfNotExists(StatsBucket, false)
-			return err2
+			b, err2 := tx.CreateBucketIfNotExists(StatsBucket, false)
+			if err2 != nil {
+				return err2
+			}
+			db.writeStats = make(map[string]*WriteStats)
+			return b.ForEach(func(k, v []byte) error {
+				st := UnmarshalWriteStats(v)
+				db.writeStats[string(k)] = &st
+				return nil
+			})
 		}); err != nil {
 			return nil, err
 		}
@@ -940,17 +950,21 @@ func (db *DB) Stats() Stats {
 	return db.stats
 }
 
-func (db *DB) WriteStats() (map[string]WriteStats, error) {
-	stats := map[string]WriteStats{}
-	if err := db.View(func(tx *Tx) error {
-		return tx.Bucket(StatsBucket).ForEach(func(k, v []byte) error {
-			stats[string(k)] = UnmarshalWriteStats(v)
-			return nil
-		})
-	}); err != nil {
-		return nil, err
-	}
-	return stats, nil
+func (db *DB) WriteStats() (map[string]*WriteStats, error) {
+	db.writestatlock.RLock()
+	defer db.writestatlock.RUnlock()
+	return db.writeStats, nil
+
+	//stats := map[string]WriteStats{}
+	//if err := db.View(func(tx *Tx) error {
+	//	return tx.Bucket(StatsBucket).ForEach(func(k, v []byte) error {
+	//		stats[string(k)] = UnmarshalWriteStats(v)
+	//		return nil
+	//	})
+	//}); err != nil {
+	//	return nil, err
+	//}
+	//return stats, nil
 }
 
 // This is for internal access to the raw data bytes from the C cursor, use
@@ -1168,7 +1182,7 @@ type Stats struct {
 	TxN     int // total number of started read transactions
 	OpenTxN int // number of currently open read transactions
 
-	TxStats    TxStats // global, ongoing stats.
+	TxStats    TxStats               // global, ongoing stats.
 }
 
 // Sub calculates and returns the difference between two sets of database stats.

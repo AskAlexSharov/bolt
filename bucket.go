@@ -42,7 +42,7 @@ type Bucket struct {
 	page       *page              // inline page reference
 	rootNode   *node              // materialized node for the root page.
 	nodes      map[pgid]*node     // node cache
-	writeStats *WriteStats
+	writeStats *WriteStatsDelta
 
 	// Sets the threshold for filling nodes when they split. By default,
 	// the bucket will fill to 50% but it can be useful to increase this
@@ -128,8 +128,8 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 		b.buckets[string(name)] = child
 	}
 
-	if b.tx.writable {
-		child.writeStats = &WriteStats{}
+	if b.tx.writable && child.writeStats == nil {
+		child.writeStats = &WriteStatsDelta{}
 	}
 
 	return child
@@ -319,13 +319,13 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 
 	stats := b.writeStats
 	if existingKey {
-		stats.ValueBytesN -= uint64(len(v))
+		stats.ValueBytesN -= len(v)
 	} else {
 		stats.KeyN++
-		stats.KeyBytesN += uint64(len(key))
+		stats.KeyBytesN += len(key)
 	}
-	stats.ValueBytesN += uint64(len(value))
-	stats.TotalBytesPut += uint64(len(key)) + uint64(len(value))
+	stats.ValueBytesN += len(value)
+	stats.TotalBytesPut += len(key) + len(value)
 	stats.TotalPut++
 
 	// Insert into node.
@@ -389,13 +389,13 @@ func (b *Bucket) MultiPut(pairs ...[]byte) error {
 
 		stats := b.writeStats
 		if existingKey {
-			stats.ValueBytesN -= uint64(len(v))
+			stats.ValueBytesN -= len(v)
 		} else {
 			stats.KeyN++
-			stats.KeyBytesN += uint64(len(key))
+			stats.KeyBytesN += len(key)
 		}
-		stats.ValueBytesN += uint64(len(value))
-		stats.TotalBytesPut += uint64(len(key)) + uint64(len(value))
+		stats.ValueBytesN += len(value)
+		stats.TotalBytesPut += len(key) + len(value)
 		stats.TotalPut++
 
 		// Insert into node.
@@ -494,9 +494,9 @@ func (b *Bucket) Delete(key []byte) error {
 
 	stats := b.writeStats
 	stats.KeyN--
-	stats.KeyBytesN -= uint64(len(key))
-	stats.ValueBytesN -= uint64(len(value))
-	stats.TotalBytesDelete += uint64(len(key)) + uint64(len(value))
+	stats.KeyBytesN -= len(key)
+	stats.ValueBytesN -= len(value)
+	stats.TotalBytesDelete += len(key) + len(value)
 	stats.TotalDelete++
 
 	// Delete the node if we have a matching key.

@@ -188,9 +188,9 @@ func (c *Cursor) Delete() error {
 
 	stats := c.bucket.writeStats
 	stats.KeyN--
-	stats.KeyBytesN -= uint64(len(key))
-	stats.ValueBytesN -= uint64(len(value))
-	stats.TotalBytesDelete += uint64(len(key)) + uint64(len(value))
+	stats.KeyBytesN -= len(key)
+	stats.ValueBytesN -= len(value)
+	stats.TotalBytesDelete += len(key) + len(value)
 	stats.TotalDelete++
 
 	return nil

@@ -1084,11 +1084,16 @@ func TestDB_WriteStats(t *testing.T) {
 		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
 	}
 
-	// delete 1 key
+	// delete 1 key by bucket api and 1 key by cursor api
 
 	if err := db.Update(func(tx *bolt.Tx) error {
 		b1 := tx.Bucket([]byte("widgets"))
 		if err2 := b1.Delete([]byte{uint8(5)}); err2 != nil {
+			return err2
+		}
+		c := b1.Cursor()
+		c.Seek([]byte{uint8(6)})
+		if err2 := c.Delete(); err2 != nil {
 			return err2
 		}
 		return err
@@ -1102,19 +1107,19 @@ func TestDB_WriteStats(t *testing.T) {
 	}
 
 	st = stats["widgets"]
-	if st.KeyN != 255 {
+	if st.KeyN != 254 {
 		t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
-	} else if st.KeyBytesN != 255 {
+	} else if st.KeyBytesN != 254 {
 		t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
-	} else if st.ValueBytesN != 255 {
+	} else if st.ValueBytesN != 254 {
 		t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
 	} else if st.TotalPut != 512 {
 		t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
-	} else if st.TotalDelete != 1 {
+	} else if st.TotalDelete != 2 {
 		t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
 	} else if st.TotalBytesPut != 1024 {
 		t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
-	} else if st.TotalBytesDelete != 2 {
+	} else if st.TotalBytesDelete != 4 {
 		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
 	}
 
@@ -1136,22 +1141,60 @@ func TestDB_WriteStats(t *testing.T) {
 	}
 
 	st = stats["widgets"]
-	if st.KeyN != 255 {
+	if st.KeyN != 254 {
 		t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
-	} else if st.KeyBytesN != 255 {
+	} else if st.KeyBytesN != 254 {
 		t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
-	} else if st.ValueBytesN != 255 {
+	} else if st.ValueBytesN != 254 {
 		t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
 	} else if st.TotalPut != 512 {
 		t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
-	} else if st.TotalDelete != 1 {
+	} else if st.TotalDelete != 2 {
 		t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
 	} else if st.TotalBytesPut != 1024 {
 		t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
-	} else if st.TotalBytesDelete != 2 {
+	} else if st.TotalBytesDelete != 4 {
 		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
 	}
 
+	// create multiple instances of same bucket in 1 tx
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		if err2 := tx.Bucket([]byte("widgets")).Put([]byte{uint8(1), uint8(1)}, []byte{uint8(1), uint8(1)}); err2 != nil {
+			return err2
+		}
+		if err2 := tx.Bucket([]byte("widgets")).Put([]byte{uint8(2), uint8(2)}, []byte{uint8(2), uint8(2)}); err2 != nil {
+			return err2
+		}
+		if err2 := tx.Bucket([]byte("widgets")).Put([]byte{uint8(3), uint8(3)}, []byte{uint8(3), uint8(3)}); err2 != nil {
+			return err2
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err = db.WriteStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st = stats["widgets"]
+	if st.KeyN != 257 {
+		t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
+	} else if st.KeyBytesN != 260 {
+		t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
+	} else if st.ValueBytesN != 260 {
+		t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
+	} else if st.TotalPut != 515 {
+		t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
+	} else if st.TotalDelete != 2 {
+		t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
+	} else if st.TotalBytesPut != 1036 {
+		t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
+	} else if st.TotalBytesDelete != 4 {
+		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
+	}
 }
 
 // Ensure that database pages are in expected order and type.
