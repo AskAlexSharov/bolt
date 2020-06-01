@@ -998,13 +998,160 @@ func TestDB_Stats(t *testing.T) {
 	}
 
 	stats := db.Stats()
-	if stats.TxStats.PageCount != 2 {
+	if stats.TxStats.PageCount != 4 {
 		t.Fatalf("unexpected TxStats.PageCount: %d", stats.TxStats.PageCount)
 	} else if stats.FreePageN != 0 {
 		t.Fatalf("unexpected FreePageN != 0: %d", stats.FreePageN)
 	} else if stats.PendingPageN != 2 {
 		t.Fatalf("unexpected PendingPageN != 2: %d", stats.PendingPageN)
 	}
+}
+
+func TestDB_WriteStats(t *testing.T) {
+	db := MustOpenDB()
+	defer db.MustClose()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b1, err := tx.CreateBucket([]byte("widgets"), false)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 256; i++ {
+			if err2 := b1.Put([]byte{uint8(i)}, []byte{uint8(i)}); err2 != nil {
+				return err2
+			}
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err := db.WriteStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st := stats["widgets"]
+	if st.KeyN != 256 {
+		t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
+	} else if st.KeyBytesN != 256 {
+		t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
+	} else if st.ValueBytesN != 256 {
+		t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
+	} else if st.TotalPut != 256 {
+		t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
+	} else if st.TotalDelete != 0 {
+		t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
+	} else if st.TotalBytesPut != 512 {
+		t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
+	} else if st.TotalBytesDelete != 0 {
+		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
+	}
+
+	// do same tx 2-nd time, it must not increase KeyN
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b1 := tx.Bucket([]byte("widgets"))
+		for i := 0; i < 256; i++ {
+			if err2 := b1.Put([]byte{uint8(i)}, []byte{uint8(i)}); err2 != nil {
+				return err2
+			}
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err = db.WriteStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st = stats["widgets"]
+	if st.KeyN != 256 {
+		t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
+	} else if st.KeyBytesN != 256 {
+		t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
+	} else if st.ValueBytesN != 256 {
+		t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
+	} else if st.TotalPut != 512 {
+		t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
+	} else if st.TotalDelete != 0 {
+		t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
+	} else if st.TotalBytesPut != 1024 {
+		t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
+	} else if st.TotalBytesDelete != 0 {
+		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
+	}
+
+	// delete 1 key
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b1 := tx.Bucket([]byte("widgets"))
+		if err2 := b1.Delete([]byte{uint8(5)}); err2 != nil {
+			return err2
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err = db.WriteStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st = stats["widgets"]
+	if st.KeyN != 255 {
+		t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
+	} else if st.KeyBytesN != 255 {
+		t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
+	} else if st.ValueBytesN != 255 {
+		t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
+	} else if st.TotalPut != 512 {
+		t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
+	} else if st.TotalDelete != 1 {
+		t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
+	} else if st.TotalBytesPut != 1024 {
+		t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
+	} else if st.TotalBytesDelete != 2 {
+		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
+	}
+
+	// read must not change this stats
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		b1 := tx.Bucket([]byte("widgets"))
+		for i := 0; i < 256; i++ {
+			_, _ = b1.Get([]byte{uint8(i)})
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err = db.WriteStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st = stats["widgets"]
+	if st.KeyN != 255 {
+		t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
+	} else if st.KeyBytesN != 255 {
+		t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
+	} else if st.ValueBytesN != 255 {
+		t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
+	} else if st.TotalPut != 512 {
+		t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
+	} else if st.TotalDelete != 1 {
+		t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
+	} else if st.TotalBytesPut != 1024 {
+		t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
+	} else if st.TotalBytesDelete != 2 {
+		t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
+	}
+
 }
 
 // Ensure that database pages are in expected order and type.
@@ -1044,25 +1191,25 @@ func TestDB_Consistency(t *testing.T) {
 
 		if p, _ := tx.Page(2); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "free" {
+		} else if p.Type != "leaf" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 
 		if p, _ := tx.Page(3); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "free" {
+		} else if p.Type != "freelist" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 
 		if p, _ := tx.Page(4); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "leaf" {
+		} else if p.Type != "free" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 
 		if p, _ := tx.Page(5); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "freelist" {
+		} else if p.Type != "free" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 

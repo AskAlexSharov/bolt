@@ -41,24 +41,24 @@ func TestStatsCommand_Run_EmptyDatabase(t *testing.T) {
 	db.DB.Close()
 
 	// Generate expected result.
-	exp := "Aggregate statistics for 0 buckets\n\n" +
+	exp := "Aggregate statistics for 1 buckets\n\n" +
 		"Page count statistics\n" +
 		"\tNumber of logical branch pages: 0\n" +
 		"\tNumber of physical branch overflow pages: 0\n" +
 		"\tNumber of logical leaf pages: 0\n" +
 		"\tNumber of physical leaf overflow pages: 0\n" +
 		"Tree statistics\n" +
-		"\tNumber of keys/value pairs: 0\n" +
-		"\tNumber of levels in B+tree: 0\n" +
+		"\tNumber of keys/value pairs: 1\n" +
+		"\tNumber of levels in B+tree: 1\n" +
 		"Page size utilization\n" +
 		"\tBytes allocated for physical branch pages: 0\n" +
 		"\tBytes actually used for branch data: 0 (0%)\n" +
 		"\tBytes allocated for physical leaf pages: 0\n" +
 		"\tBytes actually used for leaf data: 0 (0%)\n" +
 		"Bucket statistics\n" +
-		"\tTotal number of buckets: 0\n" +
-		"\tTotal number on inlined buckets: 0 (0%)\n" +
-		"\tBytes used for inlined buckets: 0 (0%)\n"
+		"\tTotal number of buckets: 1\n" +
+		"\tTotal number on inlined buckets: 1 (100%)\n" +
+		"\tBytes used for inlined buckets: 118 (0%)\n"
 
 	// Run the command.
 	m := NewMain()
@@ -164,7 +164,7 @@ func TestBucketsCommand_Run(t *testing.T) {
 	}
 	db.DB.Close()
 
-	expected := "bar\nbaz\nfoo\n"
+	expected := "_stats\nbar\nbaz\nfoo\n"
 
 	// Run the command.
 	m := NewMain()

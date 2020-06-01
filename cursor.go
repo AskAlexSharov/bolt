@@ -166,12 +166,32 @@ func (c *Cursor) Delete() error {
 		return ErrTxNotWritable
 	}
 
-	key, _, flags := c.keyValue()
+	key, value, flags := c.keyValue()
 	// Return an error if current value is a bucket.
 	if (flags & bucketLeafFlag) != 0 {
 		return ErrIncompatibleValue
 	}
-	c.node().del(key)
+
+	// Delete the node if we have a matching key.
+	if c.node().del(key) {
+		// Decrement size on all references starting from the top
+		var n = c.stack[0].node
+		if n == nil {
+			n = c.bucket.node(c.stack[0].pageID, nil)
+		}
+		for _, ref := range c.stack[:len(c.stack)-1] {
+			_assert(!n.isLeaf, "expected branch node")
+			n.inodes[ref.index].size--
+			n = n.childAt(ref.index)
+		}
+	}
+
+	stats := c.bucket.writeStats
+	stats.KeyN--
+	stats.KeyBytesN -= uint64(len(key))
+	stats.ValueBytesN -= uint64(len(value))
+	stats.TotalBytesDelete += uint64(len(key)) + uint64(len(value))
+	stats.TotalDelete++
 
 	return nil
 }
