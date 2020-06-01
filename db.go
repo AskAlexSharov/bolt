@@ -293,19 +293,6 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	db.loadFreelist()
 
-	// Flush freelist when transitioning from no sync to sync so
-	// NoFreelistSync unaware boltdb can open the db later.
-	if !db.NoFreelistSync && !db.hasSyncedFreelist() {
-		tx, err := db.Begin(true)
-		if tx != nil {
-			err = tx.Commit()
-		}
-		if err != nil {
-			_ = db.close()
-			return nil, err
-		}
-	}
-
 	if !db.readOnly {
 		if err := db.Update(func(tx *Tx) error {
 			b, err2 := tx.CreateBucketIfNotExists(StatsBucket, false)
@@ -319,6 +306,19 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 				return nil
 			})
 		}); err != nil {
+			return nil, err
+		}
+	}
+
+	// Flush freelist when transitioning from no sync to sync so
+	// NoFreelistSync unaware boltdb can open the db later.
+	if !db.NoFreelistSync && !db.hasSyncedFreelist() {
+		tx, err := db.Begin(true)
+		if tx != nil {
+			err = tx.Commit()
+		}
+		if err != nil {
+			_ = db.close()
 			return nil, err
 		}
 	}
