@@ -41,7 +41,7 @@ func testSimulate(t *testing.T, openOption *bolt.Options, round, threadCount, pa
 	var writerHandlers = []simulateHandler{simulateGetHandler, simulatePutHandler}
 
 	var versions = make(map[int]*QuickDB)
-	versions[1] = NewQuickDB()
+	versions[2] = NewQuickDB() // tx=1 - is for system buckets creation
 
 	db := MustOpenWithOption(openOption)
 	defer db.MustClose()
