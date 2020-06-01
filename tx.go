@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -30,6 +31,7 @@ type Tx struct {
 	root           Bucket
 	pages          map[pgid]*page
 	stats          TxStats
+	storedStats    WriteStats
 	commitHandlers []func()
 
 	// WriteFlag specifies the flag for write-related methods like WriteTo().
@@ -38,7 +40,7 @@ type Tx struct {
 	// By default, the flag is unset, which works well for mostly in-memory
 	// workloads. For databases that are much larger than available RAM,
 	// set the flag to syscall.O_DIRECT to avoid trashing the page cache.
-	WriteFlag int
+	WriteFlag  int
 }
 
 // init initializes the transaction.
@@ -99,14 +101,19 @@ func (tx *Tx) Stats() TxStats {
 // Returns nil if the bucket does not exist.
 // The bucket instance is only valid for the lifetime of the transaction.
 func (tx *Tx) Bucket(name []byte) *Bucket {
-	return tx.root.Bucket(name)
+	b := tx.root.Bucket(name)
+	return b
 }
 
 // CreateBucket creates a new bucket.
 // Returns an error if the bucket already exists, if the bucket name is blank, or if the bucket name is too long.
 // The bucket instance is only valid for the lifetime of the transaction.
 func (tx *Tx) CreateBucket(name []byte, enum bool) (*Bucket, error) {
-	return tx.root.CreateBucket(name, enum)
+	b, err := tx.root.CreateBucket(name, enum)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 // CreateBucketIfNotExists creates a new bucket if it doesn't already exist.
@@ -145,6 +152,46 @@ func (tx *Tx) Commit() error {
 		return ErrTxClosed
 	} else if !tx.writable {
 		return ErrTxNotWritable
+	}
+	//if tx.writable {
+	//	marshaled := map[string][]byte{}
+	//	statsBucket := tx.Bucket(StatsBucket)
+	//
+	//	tx.db.statlock.Lock()
+	//	for name, stats := range tx.WriteStats {
+	//		if dbStats, ok := tx.db.stats.WriteStats[name]; ok {
+	//			dbStats.add(stats)
+	//			marshaled[name] = dbStats.MarshalBinary(nil)
+	//		} else {
+	//			tx.db.stats.WriteStats[name] = *stats
+	//			marshaled[name] = stats.MarshalBinary(nil)
+	//		}
+	//	}
+	//	tx.db.statlock.Unlock()
+	//	for name, val := range marshaled {
+	//		if err := statsBucket.Put([]byte(name), val); err != nil {
+	//			return err
+	//		}
+	//	}
+	//}
+
+	if tx.writable {
+		statsBucket := tx.Bucket(StatsBucket)
+		for name, bucket := range tx.root.buckets {
+			stats := bucket.writeStats
+			var marshaled []byte
+			v, _ := statsBucket.Get([]byte(name))
+			if v == nil {
+				marshaled = stats.MarshalBinary(nil)
+			} else {
+				dbStats := UnmarshalWriteStats(v)
+				dbStats.add(stats)
+				marshaled = dbStats.MarshalBinary(nil)
+			}
+			if err := statsBucket.Put([]byte(name), marshaled); err != nil {
+				return err
+			}
+		}
 	}
 
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
@@ -746,4 +793,66 @@ func (s *TxStats) Sub(other *TxStats) TxStats {
 	diff.Write = s.Write - other.Write
 	diff.WriteTime = s.WriteTime - other.WriteTime
 	return diff
+}
+
+// WriteStats represents statistics about buckets - updated on each transaction.
+// In bucket object - it stores transaction-time stats, in DB object: all-time.
+type WriteStats struct {
+	KeyN             uint64 // total number of keys
+	KeyBytesN        uint64 // total number of bytes owned by keys
+	ValueBytesN      uint64 // total number of bytes owned by values
+	TotalPut         uint64
+	TotalDelete      uint64
+	TotalBytesPut    uint64
+	TotalBytesDelete uint64
+}
+
+func (s *WriteStats) add(other *WriteStats) {
+	s.KeyN += other.KeyN
+	s.KeyBytesN += other.KeyBytesN
+	s.ValueBytesN += other.ValueBytesN
+	s.TotalPut += other.TotalPut
+	s.TotalDelete += other.TotalDelete
+	s.TotalBytesPut += other.TotalBytesPut
+	s.TotalBytesDelete += other.TotalBytesDelete
+}
+
+func (s *WriteStats) Sub(other *WriteStats) WriteStats {
+	var diff WriteStats
+	diff.KeyN = s.KeyN - other.KeyN
+	diff.KeyBytesN = s.KeyBytesN - other.KeyBytesN
+	diff.ValueBytesN = s.ValueBytesN - other.ValueBytesN
+	diff.TotalPut = s.TotalPut - other.TotalPut
+	diff.TotalDelete = s.TotalDelete - other.TotalDelete
+	diff.TotalBytesPut = s.TotalBytesPut - other.TotalBytesPut
+	diff.TotalBytesDelete = s.TotalBytesDelete - other.TotalBytesDelete
+	return diff
+}
+
+func (s WriteStats) MarshalBinary(buf []byte) []byte {
+	if buf == nil {
+		buf = make([]byte, 64)
+	}
+	binary.BigEndian.PutUint64(buf[:8], s.KeyN)
+	binary.BigEndian.PutUint64(buf[8:16], s.KeyBytesN)
+	binary.BigEndian.PutUint64(buf[16:24], s.ValueBytesN)
+	binary.BigEndian.PutUint64(buf[24:32], s.TotalPut)
+	binary.BigEndian.PutUint64(buf[32:40], s.TotalPut)
+	binary.BigEndian.PutUint64(buf[40:48], s.TotalDelete)
+	binary.BigEndian.PutUint64(buf[48:56], s.TotalBytesPut)
+	binary.BigEndian.PutUint64(buf[56:64], s.TotalBytesDelete)
+	return buf
+}
+
+func UnmarshalWriteStats(buf []byte) WriteStats {
+	s := WriteStats{}
+	s.KeyN = binary.BigEndian.Uint64(buf[:8])
+	s.KeyBytesN = binary.BigEndian.Uint64(buf[8:16])
+	s.ValueBytesN = binary.BigEndian.Uint64(buf[16:24])
+	s.TotalPut = binary.BigEndian.Uint64(buf[24:32])
+	s.TotalPut = binary.BigEndian.Uint64(buf[32:40])
+	s.TotalDelete = binary.BigEndian.Uint64(buf[40:48])
+	s.TotalBytesPut = binary.BigEndian.Uint64(buf[48:56])
+	s.TotalBytesDelete = binary.BigEndian.Uint64(buf[56:64])
+	return s
 }

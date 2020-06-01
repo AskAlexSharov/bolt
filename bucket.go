@@ -32,14 +32,17 @@ const (
 // This value can be changed by setting Bucket.FillPercent.
 const DefaultFillPercent = 0.5
 
+var StatsBucket = []byte("_stats")
+
 // Bucket represents a collection of key/value pairs inside the database.
 type Bucket struct {
 	*bucket
-	tx       *Tx                // the associated transaction
-	buckets  map[string]*Bucket // subbucket cache
-	page     *page              // inline page reference
-	rootNode *node              // materialized node for the root page.
-	nodes    map[pgid]*node     // node cache
+	tx         *Tx                // the associated transaction
+	buckets    map[string]*Bucket // subbucket cache
+	page       *page              // inline page reference
+	rootNode   *node              // materialized node for the root page.
+	nodes      map[pgid]*node     // node cache
+	writeStats *WriteStats
 
 	// Sets the threshold for filling nodes when they split. By default,
 	// the bucket will fill to 50% but it can be useful to increase this
@@ -123,6 +126,10 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 	var child = b.openBucket(v)
 	if b.buckets != nil {
 		b.buckets[string(name)] = child
+	}
+
+	if b.tx.writable {
+		child.writeStats = &WriteStats{}
 	}
 
 	return child
@@ -302,12 +309,24 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
-	k, _, flags := c.seek(key)
+	k, v, flags := c.seek(key)
 
+	existingKey := bytes.Equal(key, k)
 	// Return an error if there is an existing key with a bucket value.
-	if bytes.Equal(key, k) && (flags&bucketLeafFlag) != 0 {
+	if existingKey && (flags&bucketLeafFlag) != 0 {
 		return ErrIncompatibleValue
 	}
+
+	stats := b.writeStats
+	if existingKey {
+		stats.ValueBytesN -= uint64(len(v))
+	} else {
+		stats.KeyN++
+		stats.KeyBytesN += uint64(len(key))
+	}
+	stats.ValueBytesN += uint64(len(value))
+	stats.TotalBytesPut += uint64(len(key)) + uint64(len(value))
+	stats.TotalPut++
 
 	// Insert into node.
 	//key = cloneBytes(key)
@@ -344,7 +363,7 @@ func (b *Bucket) MultiPut(pairs ...[]byte) error {
 	}
 	// TODO: Check that keys are sorted
 	c := b.Cursor()
-	var k []byte
+	var k, v []byte
 	var flags uint32
 	for i := 0; i < len(pairs); i += 2 {
 		key := pairs[i]
@@ -358,14 +377,27 @@ func (b *Bucket) MultiPut(pairs ...[]byte) error {
 		}
 		// Move cursor to correct position.
 		if i == 0 {
-			k, _, flags = c.seek(key)
+			k, v, flags = c.seek(key)
 		} else {
-			k, _, flags = c.seekTo(key)
+			k, v, flags = c.seekTo(key)
 		}
+		existingKey := bytes.Equal(key, k)
 		// Return an error if there is an existing key with a bucket value.
-		if bytes.Equal(key, k) && (flags&bucketLeafFlag) != 0 {
+		if existingKey && (flags&bucketLeafFlag) != 0 {
 			return ErrIncompatibleValue
 		}
+
+		stats := b.writeStats
+		if existingKey {
+			stats.ValueBytesN -= uint64(len(v))
+		} else {
+			stats.KeyN++
+			stats.KeyBytesN += uint64(len(key))
+		}
+		stats.ValueBytesN += uint64(len(value))
+		stats.TotalBytesPut += uint64(len(key)) + uint64(len(value))
+		stats.TotalPut++
+
 		// Insert into node.
 		if value == nil {
 			c.node().del(key)
@@ -448,7 +480,7 @@ func (b *Bucket) Delete(key []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
-	k, _, flags := c.seek(key)
+	k, value, flags := c.seek(key)
 
 	// Return nil if the key doesn't exist.
 	if !bytes.Equal(key, k) {
@@ -459,6 +491,13 @@ func (b *Bucket) Delete(key []byte) error {
 	if (flags & bucketLeafFlag) != 0 {
 		return ErrIncompatibleValue
 	}
+
+	stats := b.writeStats
+	stats.KeyN--
+	stats.KeyBytesN -= uint64(len(key))
+	stats.ValueBytesN -= uint64(len(value))
+	stats.TotalBytesDelete += uint64(len(key)) + uint64(len(value))
+	stats.TotalDelete++
 
 	// Delete the node if we have a matching key.
 	if c.node().del(key) {

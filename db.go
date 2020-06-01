@@ -304,6 +304,15 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		}
 	}
 
+	if !db.readOnly {
+		if err := db.Update(func(tx *Tx) error {
+			_, err2 := tx.CreateBucketIfNotExists(StatsBucket, false)
+			return err2
+		}); err != nil {
+			return nil, err
+		}
+	}
+
 	// Mark the database as opened and return.
 	return db, nil
 }
@@ -931,6 +940,20 @@ func (db *DB) Stats() Stats {
 	return db.stats
 }
 
+func (db *DB) WriteStats() (map[string]WriteStats, error) {
+	stats := map[string]WriteStats{}
+	if err := db.View(func(tx *Tx) error {
+		b := tx.Bucket(StatsBucket)
+		return b.ForEach(func(k, v []byte) error {
+			stats[string(k)] = UnmarshalWriteStats(v)
+			return nil
+		})
+	}); err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
 // This is for internal access to the raw data bytes from the C cursor, use
 // carefully, or not at all.
 func (db *DB) Info() *Info {
@@ -1146,7 +1169,7 @@ type Stats struct {
 	TxN     int // total number of started read transactions
 	OpenTxN int // number of currently open read transactions
 
-	TxStats TxStats // global, ongoing stats.
+	TxStats    TxStats // global, ongoing stats.
 }
 
 // Sub calculates and returns the difference between two sets of database stats.
