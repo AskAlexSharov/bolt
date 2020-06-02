@@ -1,3 +1,5 @@
+// +build simulate
+
 package bolt_test
 
 import (
