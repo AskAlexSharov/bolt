@@ -429,6 +429,9 @@ func chkdb(path string) ([]byte, error) {
 	var buf bytes.Buffer
 	err = db.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
+			if bolt.IsSystemBucket(name) { // skip system buckets
+				return nil
+			}
 			return walkBucket(b, name, nil, &buf)
 		})
 	})

@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -1271,4 +1272,8 @@ func _assert(condition bool, msg string, v ...interface{}) {
 	if !condition {
 		panic(fmt.Sprintf("assertion failed: "+msg, v...))
 	}
+}
+
+func IsSystemBucket(name []byte) bool {
+	return bytes.Equal(name, StatsBucket)
 }
