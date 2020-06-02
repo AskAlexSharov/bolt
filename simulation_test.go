@@ -360,3 +360,44 @@ func randValue() []byte {
 	}
 	return b
 }
+
+// Regression validation for https://github.com/etcd-io/bbolt/pull/122.
+// Tests multiple goroutines simultaneously opening a database.
+func TestSimulate_Open_MultipleGoroutines(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+
+	const (
+		instances  = 30
+		iterations = 30
+	)
+	path := tempfile()
+	defer os.RemoveAll(path)
+	var wg sync.WaitGroup
+	errCh := make(chan error, iterations*instances)
+	for iteration := 0; iteration < iterations; iteration++ {
+		for instance := 0; instance < instances; instance++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				db, err := bolt.Open(path, 0600, nil)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				if err := db.Close(); err != nil {
+					errCh <- err
+					return
+				}
+			}()
+		}
+		wg.Wait()
+	}
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("error from inside goroutine: %v", err)
+		}
+	}
+}
