@@ -1113,6 +1113,29 @@ func (db *DB) freepages() []pgid {
 	return fids
 }
 
+func (db *DB) addTxWriteStats(buckets map[string]*Bucket) {
+	db.writestatlock.Lock()
+	defer db.writestatlock.Unlock()
+	for name, bucket := range buckets {
+		dbStats, ok := db.writeStats[name]
+		if !ok {
+			dbStats = &WriteStats{}
+			db.writeStats[name] = dbStats
+		}
+		dbStats.add(bucket.writeStats)
+	}
+}
+
+func (db *DB) marshalWriteStats(buckets map[string]*Bucket) map[string][]byte {
+	db.writestatlock.RLock()
+	defer db.writestatlock.RUnlock()
+	marshaled := map[string][]byte{}
+	for name, _ := range buckets {
+		marshaled[name] = db.writeStats[name].MarshalBinary(nil)
+	}
+	return marshaled
+}
+
 // Options represents the options that can be set when opening a database.
 type Options struct {
 	// Timeout is the amount of time to wait to obtain a file lock.

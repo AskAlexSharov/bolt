@@ -149,31 +149,9 @@ func (tx *Tx) Commit() error {
 	}
 
 	if tx.writable {
-		marshaled := map[string][]byte{}
-		statsBucket := tx.Bucket(StatsBucket)
-		var dbStats *WriteStats
-		var ok bool
-
-		tx.db.writestatlock.Lock()
-		for name, bucket := range tx.root.buckets {
-			if dbStats, ok = tx.db.writeStats[name]; !ok {
-				dbStats = &WriteStats{}
-				tx.db.writeStats[name] = dbStats
-			}
-			dbStats.add(bucket.writeStats)
-		}
-		tx.db.writestatlock.Unlock()
-
-		tx.db.writestatlock.RLock()
-		for name, _ := range tx.root.buckets {
-			marshaled[name] = tx.db.writeStats[name].MarshalBinary(nil)
-		}
-		tx.db.writestatlock.RUnlock()
-
-		for name, val := range marshaled {
-			if err := statsBucket.Put([]byte(name), val); err != nil {
-				return err
-			}
+		if err := tx.commitDBWriteStats(); err != nil {
+			tx.rollback()
+			return err
 		}
 	}
 
@@ -316,18 +294,36 @@ func (tx *Tx) rollback() {
 			tx.db.freelist.reload(tx.db.page(tx.db.meta().freelist))
 		}
 
-		statsB := tx.Bucket(StatsBucket)
-		if statsB != nil {
-			tx.db.writestatlock.Lock()
-			_ = statsB.ForEach(func(k, v []byte) error {
-				st := UnmarshalWriteStats(v)
-				tx.db.writeStats[string(k)] = &st
-				return nil
-			})
-			tx.db.writestatlock.Unlock()
-		}
+		tx.rollbackDBWriteStats()
 	}
 	tx.close()
+}
+
+func (tx *Tx) commitDBWriteStats() error {
+	tx.db.addTxWriteStats(tx.root.buckets)
+
+	statsBucket := tx.Bucket(StatsBucket)
+	for name, val := range tx.db.marshalWriteStats(tx.root.buckets) {
+		if err := statsBucket.Put([]byte(name), val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (tx *Tx) rollbackDBWriteStats() {
+	tx.db.writestatlock.Lock()
+	defer tx.db.writestatlock.Unlock()
+
+	statsB := tx.Bucket(StatsBucket)
+	if statsB == nil {
+		return
+	}
+	_ = statsB.ForEach(func(k, v []byte) error {
+		st := UnmarshalWriteStats(v)
+		tx.db.writeStats[string(k)] = &st
+		return nil
+	})
 }
 
 func (tx *Tx) close() {
