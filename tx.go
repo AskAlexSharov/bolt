@@ -175,10 +175,6 @@ func (tx *Tx) Commit() error {
 				return err
 			}
 		}
-
-		for _, bucket := range tx.root.buckets {
-			bucket.writeStats.reset()
-		}
 	}
 
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
@@ -319,6 +315,17 @@ func (tx *Tx) rollback() {
 			// Read free page list from freelist page.
 			tx.db.freelist.reload(tx.db.page(tx.db.meta().freelist))
 		}
+
+		statsB := tx.Bucket(StatsBucket)
+		if statsB != nil {
+			tx.db.writestatlock.Lock()
+			_ = statsB.ForEach(func(k, v []byte) error {
+				st := UnmarshalWriteStats(v)
+				tx.db.writeStats[string(k)] = &st
+				return nil
+			})
+			tx.db.writestatlock.Unlock()
+		}
 	}
 	tx.close()
 }
@@ -328,6 +335,10 @@ func (tx *Tx) close() {
 		return
 	}
 	if tx.writable {
+		for _, bucket := range tx.root.buckets {
+			bucket.writeStats.reset()
+		}
+
 		// Grab freelist stats.
 		var freelistFreeN = tx.db.freelist.free_count()
 		var freelistPendingN = tx.db.freelist.pending_count()
