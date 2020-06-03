@@ -301,10 +301,12 @@ func (tx *Tx) rollback() {
 
 func (tx *Tx) commitDBWriteStats() error {
 	tx.db.addTxWriteStats(tx.root.buckets)
-
 	statsBucket := tx.Bucket(StatsBucket)
-	for name, val := range tx.db.marshalWriteStats(tx.root.buckets) {
-		if err := statsBucket.Put([]byte(name), val); err != nil {
+
+	tx.db.writestatlock.RLock()
+	defer tx.db.writestatlock.RUnlock()
+	for name, val := range tx.db.writeStatsMarshaled {
+		if err := statsBucket.Put([]byte(name), cloneBytes(val)); err != nil {
 			return err
 		}
 	}

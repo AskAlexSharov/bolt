@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -152,6 +153,7 @@ func testSimulate(t *testing.T, openOption *bolt.Options, round, threadCount, pa
 	}
 
 }
+
 type simulateHandler func(tx *bolt.Tx, qdb *QuickDB)
 
 // Retrieves a key from the database and verifies that it is what is expected.

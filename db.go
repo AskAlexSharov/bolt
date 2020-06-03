@@ -133,19 +133,20 @@ type DB struct {
 	// of truncate() and fsync() when growing the data file.
 	AllocSize int
 
-	path     string
-	file     *os.File
-	dataref  []byte // mmap'ed readonly, write throws SEGV
-	data     *[maxMapSize]byte
-	datasz   int
-	filesz   int // current on disk file size
-	meta0    *meta
-	meta1    *meta
-	pageSize int
-	rwtx     *Tx
-	txs      []*Tx
-	stats    Stats
-	writeStats map[string]*WriteStats
+	path                string
+	file                *os.File
+	dataref             []byte // mmap'ed readonly, write throws SEGV
+	data                *[maxMapSize]byte
+	datasz              int
+	filesz              int // current on disk file size
+	meta0               *meta
+	meta1               *meta
+	pageSize            int
+	rwtx                *Tx
+	txs                 []*Tx
+	stats               Stats
+	writeStats          map[string]*WriteStats
+	writeStatsMarshaled map[string][]byte
 
 	freelist     *freelist
 	freelistLoad sync.Once
@@ -301,7 +302,9 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 				return err2
 			}
 			db.writeStats = make(map[string]*WriteStats)
+			db.writeStatsMarshaled = make(map[string][]byte)
 			return b.ForEach(func(k, v []byte) error {
+				db.writeStatsMarshaled[string(k)] = cloneBytes(v)
 				st := UnmarshalWriteStats(v)
 				db.writeStats[string(k)] = &st
 				return nil
@@ -955,17 +958,6 @@ func (db *DB) WriteStats() (map[string]*WriteStats, error) {
 	db.writestatlock.RLock()
 	defer db.writestatlock.RUnlock()
 	return db.writeStats, nil
-
-	//stats := map[string]WriteStats{}
-	//if err := db.View(func(tx *Tx) error {
-	//	return tx.Bucket(StatsBucket).ForEach(func(k, v []byte) error {
-	//		stats[string(k)] = UnmarshalWriteStats(v)
-	//		return nil
-	//	})
-	//}); err != nil {
-	//	return nil, err
-	//}
-	//return stats, nil
 }
 
 // This is for internal access to the raw data bytes from the C cursor, use
@@ -1121,19 +1113,10 @@ func (db *DB) addTxWriteStats(buckets map[string]*Bucket) {
 		if !ok {
 			dbStats = &WriteStats{}
 			db.writeStats[name] = dbStats
+			db.writeStatsMarshaled[name] = dbStats.MarshalBinary(db.writeStatsMarshaled[name])
 		}
 		dbStats.add(bucket.writeStats)
 	}
-}
-
-func (db *DB) marshalWriteStats(buckets map[string]*Bucket) map[string][]byte {
-	db.writestatlock.RLock()
-	defer db.writestatlock.RUnlock()
-	marshaled := map[string][]byte{}
-	for name, _ := range buckets {
-		marshaled[name] = db.writeStats[name].MarshalBinary(nil)
-	}
-	return marshaled
 }
 
 // Options represents the options that can be set when opening a database.
