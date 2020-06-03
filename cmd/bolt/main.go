@@ -2129,7 +2129,7 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 		// Create bucket on the root transaction if this is the first level.
 		nk := len(keys)
 		if nk == 0 {
-			bkt, err := tx.CreateBucket(cloneBytes(k), false)
+			bkt, err := tx.CreateBucketIfNotExists(cloneBytes(k), false)
 			if err != nil {
 				return err
 			}
@@ -2151,7 +2151,7 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 		b.FillPercent = 1.0
 		// If there is no value then this is a bucket call.
 		if v == nil {
-			bkt, err := b.CreateBucket(cloneBytes(k), false)
+			bkt, err := b.CreateBucketIfNotExists(cloneBytes(k), false)
 			if err != nil {
 				return err
 			}

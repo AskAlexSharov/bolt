@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -147,6 +148,13 @@ func (tx *Tx) Commit() error {
 		return ErrTxNotWritable
 	}
 
+	if tx.writable {
+		if err := tx.commitDBWriteStats(); err != nil {
+			tx.rollback()
+			return err
+		}
+	}
+
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
 
 	// Rebalance nodes which have had deletions.
@@ -285,8 +293,39 @@ func (tx *Tx) rollback() {
 			// Read free page list from freelist page.
 			tx.db.freelist.reload(tx.db.page(tx.db.meta().freelist))
 		}
+
+		tx.rollbackDBWriteStats()
 	}
 	tx.close()
+}
+
+func (tx *Tx) commitDBWriteStats() error {
+	tx.db.addTxWriteStats(tx.root.buckets)
+	statsBucket := tx.Bucket(StatsBucket)
+
+	tx.db.writestatlock.RLock()
+	defer tx.db.writestatlock.RUnlock()
+	for name, val := range tx.db.writeStatsMarshaled {
+		if err := statsBucket.Put([]byte(name), cloneBytes(val)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (tx *Tx) rollbackDBWriteStats() {
+	tx.db.writestatlock.Lock()
+	defer tx.db.writestatlock.Unlock()
+
+	statsB := tx.Bucket(StatsBucket)
+	if statsB == nil {
+		return
+	}
+	_ = statsB.ForEach(func(k, v []byte) error {
+		st := UnmarshalWriteStats(v)
+		tx.db.writeStats[string(k)] = &st
+		return nil
+	})
 }
 
 func (tx *Tx) close() {
@@ -294,6 +333,10 @@ func (tx *Tx) close() {
 		return
 	}
 	if tx.writable {
+		for _, bucket := range tx.root.buckets {
+			bucket.writeStats.reset()
+		}
+
 		// Grab freelist stats.
 		var freelistFreeN = tx.db.freelist.free_count()
 		var freelistPendingN = tx.db.freelist.pending_count()
@@ -746,4 +789,86 @@ func (s *TxStats) Sub(other *TxStats) TxStats {
 	diff.Write = s.Write - other.Write
 	diff.WriteTime = s.WriteTime - other.WriteTime
 	return diff
+}
+
+// WriteStats represents all-time statistics about bucket - updated on each transaction.
+type WriteStats struct {
+	KeyN             uint64 // total number of keys
+	KeyBytesN        uint64 // total number of bytes owned by keys
+	ValueBytesN      uint64 // total number of bytes owned by values
+	TotalPut         uint64
+	TotalDelete      uint64
+	TotalBytesPut    uint64
+	TotalBytesDelete uint64
+}
+
+// WriteStatsDelta is similar to WriteStats, but can hold negative values.
+type WriteStatsDelta struct {
+	KeyN             int
+	KeyBytesN        int
+	ValueBytesN      int
+	TotalPut         int
+	TotalDelete      int
+	TotalBytesPut    int
+	TotalBytesDelete int
+}
+
+func (s *WriteStatsDelta) reset() {
+	s.KeyN = 0
+	s.KeyBytesN = 0
+	s.ValueBytesN = 0
+	s.TotalPut = 0
+	s.TotalDelete = 0
+	s.TotalBytesPut += 0
+	s.TotalBytesDelete = 0
+}
+
+func (s *WriteStats) add(other *WriteStatsDelta) {
+	s.KeyN = uint64(int(s.KeyN) + other.KeyN)
+	s.KeyBytesN = uint64(int(s.KeyBytesN) + other.KeyBytesN)
+	s.ValueBytesN = uint64(int(s.ValueBytesN) + other.ValueBytesN)
+	s.TotalPut = uint64(int(s.TotalPut) + other.TotalPut)
+	s.TotalDelete = uint64(int(s.TotalDelete) + other.TotalDelete)
+	s.TotalBytesPut = uint64(int(s.TotalBytesPut) + other.TotalBytesPut)
+	s.TotalBytesDelete = uint64(int(s.TotalBytesDelete) + other.TotalBytesDelete)
+}
+
+func (s *WriteStats) Sub(other *WriteStats) WriteStats {
+	var diff WriteStats
+	diff.KeyN = s.KeyN - other.KeyN
+	diff.KeyBytesN = s.KeyBytesN - other.KeyBytesN
+	diff.ValueBytesN = s.ValueBytesN - other.ValueBytesN
+	diff.TotalPut = s.TotalPut - other.TotalPut
+	diff.TotalDelete = s.TotalDelete - other.TotalDelete
+	diff.TotalBytesPut = s.TotalBytesPut - other.TotalBytesPut
+	diff.TotalBytesDelete = s.TotalBytesDelete - other.TotalBytesDelete
+	return diff
+}
+
+func (s WriteStats) MarshalBinary(buf []byte) []byte {
+	if buf == nil {
+		buf = make([]byte, 64)
+	}
+	binary.BigEndian.PutUint64(buf[:8], s.KeyN)
+	binary.BigEndian.PutUint64(buf[8:16], s.KeyBytesN)
+	binary.BigEndian.PutUint64(buf[16:24], s.ValueBytesN)
+	binary.BigEndian.PutUint64(buf[24:32], s.TotalPut)
+	binary.BigEndian.PutUint64(buf[32:40], s.TotalPut)
+	binary.BigEndian.PutUint64(buf[40:48], s.TotalDelete)
+	binary.BigEndian.PutUint64(buf[48:56], s.TotalBytesPut)
+	binary.BigEndian.PutUint64(buf[56:64], s.TotalBytesDelete)
+	return buf
+}
+
+func UnmarshalWriteStats(buf []byte) WriteStats {
+	s := WriteStats{}
+	s.KeyN = binary.BigEndian.Uint64(buf[:8])
+	s.KeyBytesN = binary.BigEndian.Uint64(buf[8:16])
+	s.ValueBytesN = binary.BigEndian.Uint64(buf[16:24])
+	s.TotalPut = binary.BigEndian.Uint64(buf[24:32])
+	s.TotalPut = binary.BigEndian.Uint64(buf[32:40])
+	s.TotalDelete = binary.BigEndian.Uint64(buf[40:48])
+	s.TotalBytesPut = binary.BigEndian.Uint64(buf[48:56])
+	s.TotalBytesDelete = binary.BigEndian.Uint64(buf[56:64])
+	return s
 }

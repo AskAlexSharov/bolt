@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -132,18 +133,20 @@ type DB struct {
 	// of truncate() and fsync() when growing the data file.
 	AllocSize int
 
-	path     string
-	file     *os.File
-	dataref  []byte // mmap'ed readonly, write throws SEGV
-	data     *[maxMapSize]byte
-	datasz   int
-	filesz   int // current on disk file size
-	meta0    *meta
-	meta1    *meta
-	pageSize int
-	rwtx     *Tx
-	txs      []*Tx
-	stats    Stats
+	path                string
+	file                *os.File
+	dataref             []byte // mmap'ed readonly, write throws SEGV
+	data                *[maxMapSize]byte
+	datasz              int
+	filesz              int // current on disk file size
+	meta0               *meta
+	meta1               *meta
+	pageSize            int
+	rwtx                *Tx
+	txs                 []*Tx
+	stats               Stats
+	writeStats          map[string]*WriteStats
+	writeStatsMarshaled map[string][]byte
 
 	freelist     *freelist
 	freelistLoad sync.Once
@@ -152,10 +155,11 @@ type DB struct {
 	batchMu sync.Mutex
 	batch   *batch
 
-	rwlock   sync.Mutex   // Allows only one writer at a time.
-	metalock sync.Mutex   // Protects meta page access.
-	mmaplock sync.RWMutex // Protects mmap access during remapping.
-	statlock sync.RWMutex // Protects stats access.
+	rwlock        sync.Mutex   // Allows only one writer at a time.
+	metalock      sync.Mutex   // Protects meta page access.
+	mmaplock      sync.RWMutex // Protects mmap access during remapping.
+	statlock      sync.RWMutex // Protects stats access.
+	writestatlock sync.RWMutex // Protects writeStats access.
 
 	ops struct {
 		writeAt func(b []byte, off int64) (n int, err error)
@@ -290,6 +294,25 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 
 	db.loadFreelist()
+
+	if !db.readOnly {
+		if err := db.Update(func(tx *Tx) error {
+			b, err2 := tx.CreateBucketIfNotExists(StatsBucket, false)
+			if err2 != nil {
+				return err2
+			}
+			db.writeStats = make(map[string]*WriteStats)
+			db.writeStatsMarshaled = make(map[string][]byte)
+			return b.ForEach(func(k, v []byte) error {
+				db.writeStatsMarshaled[string(k)] = cloneBytes(v)
+				st := UnmarshalWriteStats(v)
+				db.writeStats[string(k)] = &st
+				return nil
+			})
+		}); err != nil {
+			return nil, err
+		}
+	}
 
 	// Flush freelist when transitioning from no sync to sync so
 	// NoFreelistSync unaware boltdb can open the db later.
@@ -931,6 +954,12 @@ func (db *DB) Stats() Stats {
 	return db.stats
 }
 
+func (db *DB) WriteStats() map[string]*WriteStats {
+	db.writestatlock.RLock()
+	defer db.writestatlock.RUnlock()
+	return db.writeStats
+}
+
 // This is for internal access to the raw data bytes from the C cursor, use
 // carefully, or not at all.
 func (db *DB) Info() *Info {
@@ -1076,6 +1105,20 @@ func (db *DB) freepages() []pgid {
 	return fids
 }
 
+func (db *DB) addTxWriteStats(buckets map[string]*Bucket) {
+	db.writestatlock.Lock()
+	defer db.writestatlock.Unlock()
+	for name, bucket := range buckets {
+		dbStats, ok := db.writeStats[name]
+		if !ok {
+			dbStats = &WriteStats{}
+			db.writeStats[name] = dbStats
+			db.writeStatsMarshaled[name] = dbStats.MarshalBinary(db.writeStatsMarshaled[name])
+		}
+		dbStats.add(bucket.writeStats)
+	}
+}
+
 // Options represents the options that can be set when opening a database.
 type Options struct {
 	// Timeout is the amount of time to wait to obtain a file lock.
@@ -1146,7 +1189,7 @@ type Stats struct {
 	TxN     int // total number of started read transactions
 	OpenTxN int // number of currently open read transactions
 
-	TxStats TxStats // global, ongoing stats.
+	TxStats    TxStats               // global, ongoing stats.
 }
 
 // Sub calculates and returns the difference between two sets of database stats.
@@ -1235,4 +1278,8 @@ func _assert(condition bool, msg string, v ...interface{}) {
 	if !condition {
 		panic(fmt.Sprintf("assertion failed: "+msg, v...))
 	}
+}
+
+func IsSystemBucket(name []byte) bool {
+	return bytes.Equal(name, StatsBucket)
 }

@@ -62,47 +62,6 @@ func TestOpen(t *testing.T) {
 	}
 }
 
-// Regression validation for https://github.com/etcd-io/bbolt/pull/122.
-// Tests multiple goroutines simultaneously opening a database.
-func TestOpen_MultipleGoroutines(t *testing.T) {
-	if testing.Short() {
-		t.Skip("short mode")
-	}
-
-	const (
-		instances  = 30
-		iterations = 30
-	)
-	path := tempfile()
-	defer os.RemoveAll(path)
-	var wg sync.WaitGroup
-	errCh := make(chan error, iterations*instances)
-	for iteration := 0; iteration < iterations; iteration++ {
-		for instance := 0; instance < instances; instance++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				db, err := bolt.Open(path, 0600, nil)
-				if err != nil {
-					errCh <- err
-					return
-				}
-				if err := db.Close(); err != nil {
-					errCh <- err
-					return
-				}
-			}()
-		}
-		wg.Wait()
-	}
-	close(errCh)
-	for err := range errCh {
-		if err != nil {
-			t.Fatalf("error from inside goroutine: %v", err)
-		}
-	}
-}
-
 // Ensure that opening a database with a blank path returns an error.
 func TestOpen_ErrPathRequired(t *testing.T) {
 	_, err := bolt.Open("", 0666, nil)
@@ -998,13 +957,138 @@ func TestDB_Stats(t *testing.T) {
 	}
 
 	stats := db.Stats()
-	if stats.TxStats.PageCount != 2 {
+	if stats.TxStats.PageCount != 4 {
 		t.Fatalf("unexpected TxStats.PageCount: %d", stats.TxStats.PageCount)
 	} else if stats.FreePageN != 0 {
 		t.Fatalf("unexpected FreePageN != 0: %d", stats.FreePageN)
 	} else if stats.PendingPageN != 2 {
 		t.Fatalf("unexpected PendingPageN != 2: %d", stats.PendingPageN)
 	}
+}
+
+func TestDB_WriteStats(t *testing.T) {
+	db := MustOpenDB()
+	defer db.MustClose()
+
+	check := func(t *testing.T, st *bolt.WriteStats, KeyN, KeyBytesN, ValueBytesN, TotalPut, TotalDelete, TotalBytesPut, TotalBytesDelete uint64) {
+		if st.KeyN != KeyN {
+			t.Fatalf("unexpected st.KeyN: %d", st.KeyN)
+		} else if st.KeyBytesN != KeyBytesN {
+			t.Fatalf("unexpected st.KeyBytesN: %d", st.KeyBytesN)
+		} else if st.ValueBytesN != ValueBytesN {
+			t.Fatalf("unexpected st.ValueBytesN: %d", st.ValueBytesN)
+		} else if st.TotalPut != TotalPut {
+			t.Fatalf("unexpected st.TotalPut: %d", st.TotalPut)
+		} else if st.TotalDelete != TotalDelete {
+			t.Fatalf("unexpected st.TotalDelete: %d", st.TotalDelete)
+		} else if st.TotalBytesPut != TotalBytesPut {
+			t.Fatalf("unexpected st.TotalBytesPut: %d", st.TotalBytesPut)
+		} else if st.TotalBytesDelete != TotalBytesDelete {
+			t.Fatalf("unexpected st.TotalBytesDelete: %d", st.TotalBytesDelete)
+		}
+	}
+
+	t.Run("Basic", func(t *testing.T) {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b1, err := tx.CreateBucket([]byte("widgets"), false)
+			if err != nil {
+				return err
+			}
+			for i := 0; i < 256; i++ {
+				if err2 := b1.Put([]byte{uint8(i)}, []byte{uint8(i)}); err2 != nil {
+					return err2
+				}
+			}
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		check(t, db.WriteStats()["widgets"], 256, 256, 256, 256, 0, 512, 0)
+	})
+
+	t.Run("Do same tx 2nd time", func(t *testing.T) {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b1 := tx.Bucket([]byte("widgets"))
+			for i := 0; i < 256; i++ {
+				if err2 := b1.Put([]byte{uint8(i)}, []byte{uint8(i)}); err2 != nil {
+					return err2
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		check(t, db.WriteStats()["widgets"], 256, 256, 256, 512, 0, 1024, 0)
+	})
+
+	t.Run("delete 1 key by bucket api and 1 key by cursor api", func(t *testing.T) {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b1 := tx.Bucket([]byte("widgets"))
+			if err2 := b1.Delete([]byte{uint8(5)}); err2 != nil {
+				return err2
+			}
+			c := b1.Cursor()
+			c.Seek([]byte{uint8(6)})
+			if err2 := c.Delete(); err2 != nil {
+				return err2
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		check(t, db.WriteStats()["widgets"], 254, 254, 254, 512, 2, 1024, 4)
+	})
+
+	t.Run("read must not change this stats", func(t *testing.T) {
+		if err := db.View(func(tx *bolt.Tx) error {
+			b1 := tx.Bucket([]byte("widgets"))
+			for i := 0; i < 256; i++ {
+				_, _ = b1.Get([]byte{uint8(i)})
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		check(t, db.WriteStats()["widgets"], 254, 254, 254, 512, 2, 1024, 4)
+	})
+
+	t.Run("create multiple instances of same bucket in 1 tx", func(t *testing.T) {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			if err2 := tx.Bucket([]byte("widgets")).Put([]byte{uint8(1), uint8(1)}, []byte{uint8(1), uint8(1)}); err2 != nil {
+				return err2
+			}
+			if err2 := tx.Bucket([]byte("widgets")).Put([]byte{uint8(2), uint8(2)}, []byte{uint8(2), uint8(2)}); err2 != nil {
+				return err2
+			}
+			if err2 := tx.Bucket([]byte("widgets")).Put([]byte{uint8(3), uint8(3)}, []byte{uint8(3), uint8(3)}); err2 != nil {
+				return err2
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		check(t, db.WriteStats()["widgets"], 257, 260, 260, 515, 2, 1036, 4)
+	})
+
+	t.Run("rollback must not increase write stats", func(t *testing.T) {
+		_ = db.Update(func(tx *bolt.Tx) error {
+			if err2 := tx.Bucket([]byte("widgets")).Put([]byte{uint8(255), uint8(255)}, []byte{uint8(255), uint8(255)}); err2 != nil {
+				return err2
+			}
+			if err2 := tx.Bucket([]byte("widgets")).Delete([]byte{uint8(1)}); err2 != nil {
+				return err2
+			}
+
+			return errors.New("force rollback")
+		})
+
+		check(t, db.WriteStats()["widgets"], 257, 260, 260, 515, 2, 1036, 4)
+	})
 }
 
 // Ensure that database pages are in expected order and type.
@@ -1044,25 +1128,25 @@ func TestDB_Consistency(t *testing.T) {
 
 		if p, _ := tx.Page(2); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "free" {
+		} else if p.Type != "leaf" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 
 		if p, _ := tx.Page(3); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "free" {
+		} else if p.Type != "freelist" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 
 		if p, _ := tx.Page(4); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "leaf" {
+		} else if p.Type != "free" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 
 		if p, _ := tx.Page(5); p == nil {
 			t.Fatal("expected page")
-		} else if p.Type != "freelist" {
+		} else if p.Type != "free" {
 			t.Fatalf("unexpected page type: %s", p.Type)
 		}
 
