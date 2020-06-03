@@ -954,10 +954,10 @@ func (db *DB) Stats() Stats {
 	return db.stats
 }
 
-func (db *DB) WriteStats() (map[string]*WriteStats, error) {
+func (db *DB) WriteStats() map[string]*WriteStats {
 	db.writestatlock.RLock()
 	defer db.writestatlock.RUnlock()
-	return db.writeStats, nil
+	return db.writeStats
 }
 
 // This is for internal access to the raw data bytes from the C cursor, use

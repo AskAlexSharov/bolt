@@ -1004,11 +1004,7 @@ func TestDB_WriteStats(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		stats, err := db.WriteStats()
-		if err != nil {
-			t.Fatal(err)
-		}
-		check(t, stats["widgets"], 256, 256, 256, 256, 0, 512, 0)
+		check(t, db.WriteStats()["widgets"], 256, 256, 256, 256, 0, 512, 0)
 	})
 
 	t.Run("Do same tx 2nd time", func(t *testing.T) {
@@ -1024,12 +1020,7 @@ func TestDB_WriteStats(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		stats, err := db.WriteStats()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		check(t, stats["widgets"], 256, 256, 256, 512, 0, 1024, 0)
+		check(t, db.WriteStats()["widgets"], 256, 256, 256, 512, 0, 1024, 0)
 	})
 
 	t.Run("delete 1 key by bucket api and 1 key by cursor api", func(t *testing.T) {
@@ -1048,12 +1039,7 @@ func TestDB_WriteStats(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		stats, err := db.WriteStats()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		check(t, stats["widgets"], 254, 254, 254, 512, 2, 1024, 4)
+		check(t, db.WriteStats()["widgets"], 254, 254, 254, 512, 2, 1024, 4)
 	})
 
 	t.Run("read must not change this stats", func(t *testing.T) {
@@ -1067,12 +1053,7 @@ func TestDB_WriteStats(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		stats, err := db.WriteStats()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		check(t, stats["widgets"], 254, 254, 254, 512, 2, 1024, 4)
+		check(t, db.WriteStats()["widgets"], 254, 254, 254, 512, 2, 1024, 4)
 	})
 
 	t.Run("create multiple instances of same bucket in 1 tx", func(t *testing.T) {
@@ -1091,12 +1072,7 @@ func TestDB_WriteStats(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		stats, err := db.WriteStats()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		check(t, stats["widgets"], 257, 260, 260, 515, 2, 1036, 4)
+		check(t, db.WriteStats()["widgets"], 257, 260, 260, 515, 2, 1036, 4)
 	})
 
 	t.Run("rollback must not increase write stats", func(t *testing.T) {
@@ -1111,12 +1087,7 @@ func TestDB_WriteStats(t *testing.T) {
 			return errors.New("force rollback")
 		})
 
-		stats, err := db.WriteStats()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		check(t, stats["widgets"], 257, 260, 260, 515, 2, 1036, 4)
+		check(t, db.WriteStats()["widgets"], 257, 260, 260, 515, 2, 1036, 4)
 	})
 }
 
