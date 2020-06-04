@@ -16,12 +16,6 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
 
-      - name: dbg
-        run: pwd
-
-      - name: dbg2
-        run: ls
-
       - uses: actions/cache@v2
         with:
           path: ~/go/pkg/mod
