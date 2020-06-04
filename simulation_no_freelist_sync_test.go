@@ -20,7 +20,11 @@ func TestSimulateNoFreeListSync_100op_1p(t *testing.T) {
 func TestSimulateNoFreeListSync_1000op_1p(t *testing.T) {
 	testSimulate(t, &bolt.Options{NoFreelistSync: true}, 8, 1000, 1)
 }
+
 func TestSimulateNoFreeListSync_10000op_1p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	testSimulate(t, &bolt.Options{NoFreelistSync: true}, 8, 10000, 1)
 }
 func TestSimulateNoFreeListSync_10op_10p(t *testing.T) {
@@ -32,7 +36,11 @@ func TestSimulateNoFreeListSync_100op_10p(t *testing.T) {
 func TestSimulateNoFreeListSync_1000op_10p(t *testing.T) {
 	testSimulate(t, &bolt.Options{NoFreelistSync: true}, 8, 1000, 10)
 }
+
 func TestSimulateNoFreeListSync_10000op_10p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	testSimulate(t, &bolt.Options{NoFreelistSync: true}, 8, 10000, 10)
 }
 func TestSimulateNoFreeListSync_100op_100p(t *testing.T) {
@@ -42,8 +50,15 @@ func TestSimulateNoFreeListSync_1000op_100p(t *testing.T) {
 	testSimulate(t, &bolt.Options{NoFreelistSync: true}, 8, 1000, 100)
 }
 func TestSimulateNoFreeListSync_10000op_100p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	testSimulate(t, &bolt.Options{NoFreelistSync: true}, 8, 10000, 100)
 }
+
 func TestSimulateNoFreeListSync_10000op_1000p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	testSimulate(t, &bolt.Options{NoFreelistSync: true}, 8, 10000, 1000)
 }
