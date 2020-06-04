@@ -5,9 +5,9 @@ jobs:
   test:
     strategy:
       matrix:
-        platform: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         go: [ '1.14', '1.13' ]
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v2
@@ -15,6 +15,17 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go }}
+
+      - name: dbg
+        run: pwd
+
+      - name: dbg2
+        run: ls
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ matrix.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Test
         run: make test
