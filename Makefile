@@ -5,9 +5,9 @@ GOLDFLAGS="-X main.branch $(BRANCH) -X main.commit $(COMMIT)"
 default: build
 
 race:
-	@TEST_FREELIST_TYPE=hashmap go test -v -race -timeout 25m -tags simulate -test.run="TestSimulate_(100op|1000op)"
+	@TEST_FREELIST_TYPE=hashmap go test -v -race -timeout 25m -tags simulate -test.run="TestSimulate_*"
 	@echo "array freelist test"
-	@TEST_FREELIST_TYPE=array go test -v -race -timeout 25m -tags simulate -test.run="TestSimulate_(100op|1000op)"
+	@TEST_FREELIST_TYPE=array go test -v -race -timeout 25m -tags simulate -test.run="TestSimulate_*"
 
 # go get github.com/kisielk/errcheck
 errcheck:
