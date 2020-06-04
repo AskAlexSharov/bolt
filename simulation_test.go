@@ -14,31 +14,48 @@ import (
 	"github.com/ledgerwatch/bolt"
 )
 
-func TestSimulate_1op_1p(t *testing.T)     { testSimulate(t, nil, 1, 1, 1) }
-func TestSimulate_10op_1p(t *testing.T)    { testSimulate(t, nil, 1, 10, 1) }
-func TestSimulate_100op_1p(t *testing.T)   { testSimulate(t, nil, 1, 100, 1) }
-func TestSimulate_1000op_1p(t *testing.T)  { testSimulate(t, nil, 1, 1000, 1) }
-//func TestSimulate_10000op_1p(t *testing.T) { testSimulate(t, nil, 1, 10000, 1) }
+func TestSimulate_1op_1p(t *testing.T)    { testSimulate(t, nil, 1, 1, 1) }
+func TestSimulate_10op_1p(t *testing.T)   { testSimulate(t, nil, 1, 10, 1) }
+func TestSimulate_100op_1p(t *testing.T)  { testSimulate(t, nil, 1, 100, 1) }
+func TestSimulate_1000op_1p(t *testing.T) { testSimulate(t, nil, 1, 1000, 1) }
+func TestSimulate_10000op_1p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	testSimulate(t, nil, 1, 10000, 1)
+}
 
 func TestSimulate_10op_10p(t *testing.T)    { testSimulate(t, nil, 1, 10, 10) }
 func TestSimulate_100op_10p(t *testing.T)   { testSimulate(t, nil, 1, 100, 10) }
 func TestSimulate_1000op_10p(t *testing.T)  { testSimulate(t, nil, 1, 1000, 10) }
 
-//func TestSimulate_10000op_10p(t *testing.T) { testSimulate(t, nil, 1, 10000, 10) }
-
-func TestSimulate_100op_100p(t *testing.T)   { testSimulate(t, nil, 1, 100, 100) }
-func TestSimulate_1000op_100p(t *testing.T)  { testSimulate(t, nil, 1, 1000, 100) }
-
-//func TestSimulate_10000op_100p(t *testing.T) { testSimulate(t, nil, 1, 10000, 100) }
-
-func TestSimulate_10000op_1000p(t *testing.T) { testSimulate(t, nil, 1, 10000, 1000) }
-
-// Randomly generate operations on a given database with multiple clients to ensure consistency and thread safety.
-func testSimulate(t *testing.T, openOption *bolt.Options, round, threadCount, parallelism int) {
+func TestSimulate_10000op_10p(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
 
+	testSimulate(t, nil, 1, 10000, 10)
+}
+
+func TestSimulate_100op_100p(t *testing.T)   { testSimulate(t, nil, 1, 100, 100) }
+func TestSimulate_1000op_100p(t *testing.T)  { testSimulate(t, nil, 1, 1000, 100) }
+
+func TestSimulate_10000op_100p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	testSimulate(t, nil, 1, 10000, 100)
+}
+
+func TestSimulate_10000op_1000p(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	testSimulate(t, nil, 1, 10000, 1000)
+}
+
+// Randomly generate operations on a given database with multiple clients to ensure consistency and thread safety.
+func testSimulate(t *testing.T, openOption *bolt.Options, round, threadCount, parallelism int) {
 	rand.Seed(int64(qseed))
 
 	// A list of operations that readers and writers can perform.
