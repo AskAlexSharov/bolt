@@ -355,13 +355,13 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 			t.Fatal(err)
 		}
 		c := b.Cursor()
-		if err := c.Put([]byte("a"), []byte{}); err != nil {
+		if err := c.Put([]byte("a"), []byte{1}); err != nil {
 			t.Fatal(err)
 		}
-		if err := c.Put([]byte("b"), []byte{0}); err != nil {
+		if err := c.Put([]byte("b"), []byte{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := c.Put([]byte("c"), []byte{1}); err != nil {
+		if err := c.Put([]byte("c"), []byte{0}); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -377,7 +377,7 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
 	k, v := c.First()
-	if !bytes.Equal(k, []byte("1")) {
+	if !bytes.Equal(k, []byte("a")) {
 		t.Fatalf("unexpected key: %v", k)
 	} else if !bytes.Equal(v, []byte{1}) {
 		t.Fatalf("unexpected value: %v", v)
