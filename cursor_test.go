@@ -41,13 +41,14 @@ func TestCursor_Seek(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("foo"), []byte("0001")); err != nil {
+		c := b.Cursor()
+		if err := c.Put([]byte("a"), []byte("0002")); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("bar"), []byte("0002")); err != nil {
+		if err := c.Put([]byte("b"), []byte("0001")); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("baz"), []byte("0003")); err != nil {
+		if err := c.Put([]byte("c"), []byte("0003")); err != nil {
 			t.Fatal(err)
 		}
 
@@ -63,21 +64,21 @@ func TestCursor_Seek(t *testing.T) {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 
 		// Exact match should go to the key.
-		if k, v := c.Seek([]byte("bar")); !bytes.Equal(k, []byte("bar")) {
+		if k, v := c.Seek([]byte("a")); !bytes.Equal(k, []byte("a")) {
 			t.Fatalf("unexpected key: %v", k)
 		} else if !bytes.Equal(v, []byte("0002")) {
-			t.Fatalf("unexpected value: %v", v)
+			t.Fatalf("unexpected value: %s", v)
 		}
 
 		// Inexact match should go to the next key.
-		if k, v := c.Seek([]byte("bas")); !bytes.Equal(k, []byte("baz")) {
+		if k, v := c.Seek([]byte("c")); !bytes.Equal(k, []byte("c")) {
 			t.Fatalf("unexpected key: %v", k)
 		} else if !bytes.Equal(v, []byte("0003")) {
 			t.Fatalf("unexpected value: %v", v)
 		}
 
 		// Low key should go to the first key.
-		if k, v := c.Seek([]byte("")); !bytes.Equal(k, []byte("bar")) {
+		if k, v := c.Seek([]byte("")); !bytes.Equal(k, []byte("a")) {
 			t.Fatalf("unexpected key: %v", k)
 		} else if !bytes.Equal(v, []byte("0002")) {
 			t.Fatalf("unexpected value: %v", v)
@@ -115,9 +116,10 @@ func TestCursor_SeekTo(t *testing.T) {
 		tx.CreateBucket([]byte("widgets2"), false)
 		tx.CreateBucket([]byte("widgets3"), false)
 
+		c := b.Cursor()
 		for i := uint8(0); i < 254; i++ {
 			for j := uint8(0); j < 254; j++ {
-				if err := b.Put([]byte{i, j}, []byte{i, j}); err != nil {
+				if err := c.Put([]byte{i, j}, []byte{i, j}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -176,10 +178,11 @@ func TestCursor_Delete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		c := b.Cursor()
 		for i := 0; i < count; i += 1 {
 			k := make([]byte, 8)
 			binary.BigEndian.PutUint64(k, uint64(i))
-			if err := b.Put(k, make([]byte, 100)); err != nil {
+			if err := c.Put(k, make([]byte, 100)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -240,11 +243,12 @@ func TestCursor_Seek_Large(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		c := b.Cursor()
 		for i := 0; i < count; i += 100 {
 			for j := i; j < i+100; j += 2 {
 				k := make([]byte, 8)
 				binary.BigEndian.PutUint64(k, uint64(j))
-				if err := b.Put(k, make([]byte, 100)); err != nil {
+				if err := c.Put(k, make([]byte, 100)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -350,13 +354,14 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("baz"), []byte{}); err != nil {
+		c := b.Cursor()
+		if err := c.Put([]byte("a"), []byte{1}); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("foo"), []byte{0}); err != nil {
+		if err := c.Put([]byte("b"), []byte{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("bar"), []byte{1}); err != nil {
+		if err := c.Put([]byte("c"), []byte{0}); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -372,21 +377,21 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
 	k, v := c.First()
-	if !bytes.Equal(k, []byte("bar")) {
+	if !bytes.Equal(k, []byte("a")) {
 		t.Fatalf("unexpected key: %v", k)
 	} else if !bytes.Equal(v, []byte{1}) {
 		t.Fatalf("unexpected value: %v", v)
 	}
 
 	k, v = c.Next()
-	if !bytes.Equal(k, []byte("baz")) {
+	if !bytes.Equal(k, []byte("b")) {
 		t.Fatalf("unexpected key: %v", k)
 	} else if !bytes.Equal(v, []byte{}) {
 		t.Fatalf("unexpected value: %v", v)
 	}
 
 	k, v = c.Next()
-	if !bytes.Equal(k, []byte("foo")) {
+	if !bytes.Equal(k, []byte("c")) {
 		t.Fatalf("unexpected key: %v", k)
 	} else if !bytes.Equal(v, []byte{0}) {
 		t.Fatalf("unexpected value: %v", v)
@@ -421,13 +426,14 @@ func TestCursor_LeafRootReverse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("baz"), []byte{}); err != nil {
+		c := b.Cursor()
+		if err := c.Put([]byte("a"), []byte{1}); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("foo"), []byte{0}); err != nil {
+		if err := c.Put([]byte("b"), []byte{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("bar"), []byte{1}); err != nil {
+		if err := c.Put([]byte("c"), []byte{0}); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -440,19 +446,19 @@ func TestCursor_LeafRootReverse(t *testing.T) {
 	}
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
-	if k, v := c.Last(); !bytes.Equal(k, []byte("foo")) {
+	if k, v := c.Last(); !bytes.Equal(k, []byte("c")) {
 		t.Fatalf("unexpected key: %v", k)
 	} else if !bytes.Equal(v, []byte{0}) {
 		t.Fatalf("unexpected value: %v", v)
 	}
 
-	if k, v := c.Prev(); !bytes.Equal(k, []byte("baz")) {
+	if k, v := c.Prev(); !bytes.Equal(k, []byte("b")) {
 		t.Fatalf("unexpected key: %v", k)
 	} else if !bytes.Equal(v, []byte{}) {
 		t.Fatalf("unexpected value: %v", v)
 	}
 
-	if k, v := c.Prev(); !bytes.Equal(k, []byte("bar")) {
+	if k, v := c.Prev(); !bytes.Equal(k, []byte("a")) {
 		t.Fatalf("unexpected key: %v", k)
 	} else if !bytes.Equal(v, []byte{1}) {
 		t.Fatalf("unexpected value: %v", v)
@@ -485,10 +491,11 @@ func TestCursor_Restart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("bar"), []byte{}); err != nil {
+		c := b.Cursor()
+		if err := c.Put([]byte("a"), []byte{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("foo"), []byte{}); err != nil {
+		if err := c.Put([]byte("b"), []byte{}); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -502,17 +509,17 @@ func TestCursor_Restart(t *testing.T) {
 	}
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
-	if k, _ := c.First(); !bytes.Equal(k, []byte("bar")) {
+	if k, _ := c.First(); !bytes.Equal(k, []byte("a")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
-	if k, _ := c.Next(); !bytes.Equal(k, []byte("foo")) {
+	if k, _ := c.Next(); !bytes.Equal(k, []byte("b")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
 
-	if k, _ := c.First(); !bytes.Equal(k, []byte("bar")) {
+	if k, _ := c.First(); !bytes.Equal(k, []byte("a")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
-	if k, _ := c.Next(); !bytes.Equal(k, []byte("foo")) {
+	if k, _ := c.Next(); !bytes.Equal(k, []byte("b")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
 
@@ -532,9 +539,9 @@ func TestCursor_First_EmptyPages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
+		c := b.Cursor()
 		for i := 0; i < 1000; i++ {
-			if err := b.Put(u64tob(uint64(i)), []byte{}); err != nil {
+			if err := c.Put(u64tob(uint64(i)), []byte{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -547,15 +554,16 @@ func TestCursor_First_EmptyPages(t *testing.T) {
 	// Delete half the keys and then try to iterate.
 	if err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
+		c := b.Cursor()
 		for i := 0; i < 600; i++ {
-			if err := b.Delete(u64tob(uint64(i))); err != nil {
+			if err := c.Delete2(u64tob(uint64(i))); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		c := b.Cursor()
+		c2 := b.Cursor()
 		var n int
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		for k, _ := c2.First(); k != nil; k, _ = c2.Next() {
 			n++
 		}
 		if n != 400 {
@@ -583,8 +591,9 @@ func TestCursor_QuickCheck(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		c := b.Cursor()
 		for _, item := range items {
-			if err := b.Put(item.Key, item.Value); err != nil {
+			if err := c.Put(item.Key, item.Value); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -602,7 +611,7 @@ func TestCursor_QuickCheck(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		c := tx.Bucket([]byte("widgets")).Cursor()
+		c = tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.First(); k != nil && index < len(items); k, v = c.Next() {
 			if !bytes.Equal(k, items[index].Key) {
 				t.Fatalf("unexpected key: %v", k)
@@ -641,8 +650,9 @@ func TestCursor_QuickCheck_Reverse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		c := b.Cursor()
 		for _, item := range items {
-			if err := b.Put(item.Key, item.Value); err != nil {
+			if err := c.Put(item.Key, item.Value); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -659,7 +669,7 @@ func TestCursor_QuickCheck_Reverse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c := tx.Bucket([]byte("widgets")).Cursor()
+		c = tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.Last(); k != nil && index < len(items); k, v = c.Prev() {
 			if !bytes.Equal(k, items[index].Key) {
 				t.Fatalf("unexpected key: %v", k)
@@ -783,19 +793,20 @@ func ExampleCursor() {
 			return err
 		}
 
-		// Insert data into a bucket.
-		if err := b.Put([]byte("dog"), []byte("fun")); err != nil {
+		c := b.Cursor()
+		// Insert data into a bucket. Expected to be sorted.
+		if err := c.Put([]byte("cat"), []byte("lame")); err != nil {
 			log.Fatal(err)
 		}
-		if err := b.Put([]byte("cat"), []byte("lame")); err != nil {
+		if err := c.Put([]byte("dog"), []byte("fun")); err != nil {
 			log.Fatal(err)
 		}
-		if err := b.Put([]byte("liger"), []byte("awesome")); err != nil {
+		if err := c.Put([]byte("liger"), []byte("awesome")); err != nil {
 			log.Fatal(err)
 		}
 
 		// Create a cursor for iteration.
-		c := b.Cursor()
+		c = b.Cursor()
 
 		// Iterate over items in sorted key order. This starts from the
 		// first key/value pair and updates the k/v variables to the
@@ -837,19 +848,20 @@ func ExampleCursor_reverse() {
 			return err
 		}
 
-		// Insert data into a bucket.
-		if err := b.Put([]byte("dog"), []byte("fun")); err != nil {
+		c := b.Cursor()
+		// Insert data into a bucket. Expected to be sorted.
+		if err := c.Put([]byte("cat"), []byte("lame")); err != nil {
 			log.Fatal(err)
 		}
-		if err := b.Put([]byte("cat"), []byte("lame")); err != nil {
+		if err := c.Put([]byte("dog"), []byte("fun")); err != nil {
 			log.Fatal(err)
 		}
-		if err := b.Put([]byte("liger"), []byte("awesome")); err != nil {
+		if err := c.Put([]byte("liger"), []byte("awesome")); err != nil {
 			log.Fatal(err)
 		}
 
 		// Create a cursor for iteration.
-		c := b.Cursor()
+		c = b.Cursor()
 
 		// Iterate over items in reverse sorted key order. This starts
 		// from the last key/value pair and updates the k/v variables to
