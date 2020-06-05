@@ -198,7 +198,10 @@ func (c *Cursor) Delete() error {
 
 // Delete2 - analog of SeekTo+Delete. Mimic LMDB's cursor.Delete interface.
 func (c *Cursor) Delete2(key []byte) error {
-	_, _ = c.SeekTo(key)
+	k, _ := c.SeekTo(key)
+	if !bytes.Equal(k, key) {
+		return nil
+	}
 	return c.Delete()
 }
 
