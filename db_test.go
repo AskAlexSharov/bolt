@@ -252,9 +252,10 @@ func TestOpen_Size_Large(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		if err := db.Batch(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists([]byte("data"), false)
+			c := b.Cursor()
 			for j := 0; j < 100; j++ {
 				var v = make([]byte, 10_000)
-				if err := b.Put(u64tob(index), v); err != nil {
+				if err := c.Put(u64tob(index), v); err != nil {
 					t.Fatal(err)
 				}
 				index++
@@ -282,7 +283,7 @@ func TestOpen_Size_Large(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := db0.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket([]byte("data")).Put([]byte{0}, []byte{0})
+		return tx.Bucket([]byte("data")).Cursor().Put([]byte{0}, []byte{0})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +395,7 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 	}
 
 	// and commit a large write
-	err = b.Put([]byte("foo"), make([]byte, testWriteSize))
+	err = b.Cursor().Put([]byte("foo"), make([]byte, testWriteSize))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +432,7 @@ func TestDB_Open_ReadOnly(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("foo"), []byte("bar")); err != nil {
+		if err := b.Cursor().Put([]byte("foo"), []byte("bar")); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -492,7 +493,7 @@ func TestOpen_RecoverFreeList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = b.Put([]byte(s), wbuf); err != nil {
+		if err = b.Cursor().Put([]byte(s), wbuf); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -510,7 +511,8 @@ func TestOpen_RecoverFreeList(t *testing.T) {
 		if b == nil {
 			t.Fatal(err)
 		}
-		if err := b.Delete([]byte(s)); err != nil {
+		c := b.Cursor()
+		if err := c.Delete2([]byte(s)); err != nil {
 			t.Fatal(err)
 		}
 	}

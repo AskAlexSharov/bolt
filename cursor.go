@@ -196,6 +196,56 @@ func (c *Cursor) Delete() error {
 	return nil
 }
 
+// Delete2 - analog of SeekTo+Delete. Mimic LMDB's cursor.Delete interface.
+func (c *Cursor) Delete2(key []byte) error {
+	_, _ = c.SeekTo(key)
+	return c.Delete()
+}
+
+// Put - analog of SeekTo+Put. Mimic LMDB's cursor.Put interface.
+func (c *Cursor) Put(key []byte, value []byte) error {
+	if c.bucket.tx.db == nil {
+		return ErrTxClosed
+	} else if !c.bucket.Writable() {
+		return ErrTxNotWritable
+	}
+
+	k, v, flags := c.seekTo(key)
+	existingKey := bytes.Equal(key, k)
+
+	// Return an error if there is an existing key with a bucket value.
+	if existingKey && (flags&bucketLeafFlag) != 0 {
+		return ErrIncompatibleValue
+	}
+
+	stats := c.bucket.writeStats
+	if existingKey {
+		stats.ValueBytesN -= len(v)
+	} else {
+		stats.KeyN++
+		stats.KeyBytesN += len(key)
+	}
+	stats.ValueBytesN += len(value)
+	stats.TotalBytesPut += len(key) + len(value)
+	stats.TotalPut++
+
+	// Put the node if we have a matching key.
+	if c.node().put(key, key, value, 0, 0, 0) {
+		// Increment size on all references starting from the top
+		var n = c.stack[0].node
+		if n == nil {
+			n = c.bucket.node(c.stack[0].pageID, nil)
+		}
+		for _, ref := range c.stack[:len(c.stack)-1] {
+			_assert(!n.isLeaf, "expected branch node")
+			n.inodes[ref.index].size++
+			n = n.childAt(int(ref.index))
+		}
+	}
+
+	return nil
+}
+
 // seek moves the cursor to a given key and returns it.
 // If the key does not exist then the next key is used.
 func (c *Cursor) seek(seek []byte) (key []byte, value []byte, flags uint32) {
