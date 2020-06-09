@@ -22,7 +22,9 @@ jobs:
           key: go-${{ matrix.os }}-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
 
       - name: Lint
-        run: make lint
+        run: |
+          make lint-deps
+          make lint
 
       - name: Test
         run: make test
