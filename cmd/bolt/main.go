@@ -1695,17 +1695,17 @@ func (cmd *BenchCommand) startProfiling(options *BenchOptions) {
 	if options.CPUProfile != "" {
 		cpuprofile, err = os.Create(options.CPUProfile)
 		if err != nil {
-			fmt.Fprintf(cmd.Stderr, "bench: could not create cpu profile %q: %v\n", options.CPUProfile, err)
+			_, _ = fmt.Fprintf(cmd.Stderr, "bench: could not create cpu profile %q: %v\n", options.CPUProfile, err)
 			os.Exit(1)
 		}
-		pprof.StartCPUProfile(cpuprofile)
+		_ = pprof.StartCPUProfile(cpuprofile)
 	}
 
 	// Start memory profiling.
 	if options.MemProfile != "" {
 		memprofile, err = os.Create(options.MemProfile)
 		if err != nil {
-			fmt.Fprintf(cmd.Stderr, "bench: could not create memory profile %q: %v\n", options.MemProfile, err)
+			_, _ = fmt.Fprintf(cmd.Stderr, "bench: could not create memory profile %q: %v\n", options.MemProfile, err)
 			os.Exit(1)
 		}
 		runtime.MemProfileRate = 4096
@@ -1715,7 +1715,7 @@ func (cmd *BenchCommand) startProfiling(options *BenchOptions) {
 	if options.BlockProfile != "" {
 		blockprofile, err = os.Create(options.BlockProfile)
 		if err != nil {
-			fmt.Fprintf(cmd.Stderr, "bench: could not create block profile %q: %v\n", options.BlockProfile, err)
+			_, _ = fmt.Fprintf(cmd.Stderr, "bench: could not create block profile %q: %v\n", options.BlockProfile, err)
 			os.Exit(1)
 		}
 		runtime.SetBlockProfileRate(1)
@@ -1726,19 +1726,19 @@ func (cmd *BenchCommand) startProfiling(options *BenchOptions) {
 func (cmd *BenchCommand) stopProfiling() {
 	if cpuprofile != nil {
 		pprof.StopCPUProfile()
-		cpuprofile.Close()
+		_ = cpuprofile.Close()
 		cpuprofile = nil
 	}
 
 	if memprofile != nil {
 		pprof.Lookup("heap").WriteTo(memprofile, 0)
-		memprofile.Close()
+		_ = memprofile.Close()
 		memprofile = nil
 	}
 
 	if blockprofile != nil {
 		pprof.Lookup("block").WriteTo(blockprofile, 0)
-		blockprofile.Close()
+		_ = blockprofile.Close()
 		blockprofile = nil
 		runtime.SetBlockProfileRate(0)
 	}
