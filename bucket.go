@@ -578,9 +578,9 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 func (b *Bucket) Stats() BucketStats {
 	var s, subStats BucketStats
 	pageSize := b.tx.db.pageSize
-	s.BucketN += 1
+	s.BucketN++
 	if b.root == 0 {
-		s.InlineBucketN += 1
+		s.InlineBucketN++
 	}
 	b.forEachPage(func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {

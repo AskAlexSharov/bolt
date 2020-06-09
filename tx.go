@@ -420,7 +420,7 @@ func (tx *Tx) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Write meta 1 with a lower transaction id.
 	page.id = 1
-	page.meta().txid -= 1
+	page.meta().txid--
 	page.meta().checksum = page.meta().sum64()
 	nn, err = w.Write(buf)
 	n += int64(nn)

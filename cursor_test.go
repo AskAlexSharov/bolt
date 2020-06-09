@@ -179,7 +179,7 @@ func TestCursor_Delete(t *testing.T) {
 			t.Fatal(err)
 		}
 		c := b.Cursor()
-		for i := 0; i < count; i += 1 {
+		for i := 0; i < count; i++ {
 			k := make([]byte, 8)
 			binary.BigEndian.PutUint64(k, uint64(i))
 			if err := c.Put(k, make([]byte, 100)); err != nil {

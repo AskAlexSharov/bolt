@@ -903,7 +903,7 @@ func (cmd *PagesCommand) Run(args ...string) error {
 			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-6s %-6s\n", p.ID, p.Type, count, overflow)
 
 			// Move to the next non-overflow page.
-			id += 1
+			id++
 			if p.Type != "free" {
 				id += p.OverflowCount
 			}
@@ -976,7 +976,7 @@ func (cmd *StatsCommand) Run(args ...string) error {
 		if err := tx.ForEach(func(name []byte, b *bolt.Bucket) error {
 			if bytes.HasPrefix(name, []byte(prefix)) {
 				s.Add(b.Stats())
-				count += 1
+				count++
 			}
 			return nil
 		}); err != nil {

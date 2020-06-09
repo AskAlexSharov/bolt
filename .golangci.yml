@@ -10,20 +10,19 @@ run:
 linters:
   disable-all: true
   enable:
-    - errcheck
+#    - errcheck
     - goconst
     - gofmt
-    - golint
+    #    - golint
     - interfacer
     - govet
     - structcheck
     - stylecheck
     - staticcheck
-    - goerr113
-    - unconvert
-    - unparam
-    - varcheck
-    - scopelint
+    #    - goerr113
+    #    - unconvert
+    #    - unparam
+    #    - scopelint
     - nakedret
     - prealloc
     - gosimple

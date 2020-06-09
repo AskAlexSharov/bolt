@@ -506,7 +506,7 @@ func TestTx_OnCommit(t *testing.T) {
 
 	var x int
 	if err := db.Update(func(tx *bolt.Tx) error {
-		tx.OnCommit(func() { x += 1 })
+		tx.OnCommit(func() { x++ })
 		tx.OnCommit(func() { x += 2 })
 		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
 			t.Fatal(err)
@@ -526,7 +526,7 @@ func TestTx_OnCommit_Rollback(t *testing.T) {
 
 	var x int
 	if err := db.Update(func(tx *bolt.Tx) error {
-		tx.OnCommit(func() { x += 1 })
+		tx.OnCommit(func() { x++ })
 		tx.OnCommit(func() { x += 2 })
 		if _, err := tx.CreateBucket([]byte("widgets"), false); err != nil {
 			t.Fatal(err)
