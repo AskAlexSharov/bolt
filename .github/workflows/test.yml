@@ -25,6 +25,7 @@ jobs:
         uses: golangci/golangci-lint-action@v1
         with:
           version: v1.27
+          only-new-issues: true
 
       - name: Test
         run: make test
