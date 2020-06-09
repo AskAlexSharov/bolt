@@ -25,9 +25,9 @@ func TestSimulate_10000op_1p(t *testing.T) {
 	testSimulate(t, nil, 1, 10000, 1)
 }
 
-func TestSimulate_10op_10p(t *testing.T)    { testSimulate(t, nil, 1, 10, 10) }
-func TestSimulate_100op_10p(t *testing.T)   { testSimulate(t, nil, 1, 100, 10) }
-func TestSimulate_1000op_10p(t *testing.T)  { testSimulate(t, nil, 1, 1000, 10) }
+func TestSimulate_10op_10p(t *testing.T)   { testSimulate(t, nil, 1, 10, 10) }
+func TestSimulate_100op_10p(t *testing.T)  { testSimulate(t, nil, 1, 100, 10) }
+func TestSimulate_1000op_10p(t *testing.T) { testSimulate(t, nil, 1, 1000, 10) }
 
 func TestSimulate_10000op_10p(t *testing.T) {
 	if testing.Short() {
@@ -37,8 +37,8 @@ func TestSimulate_10000op_10p(t *testing.T) {
 	testSimulate(t, nil, 1, 10000, 10)
 }
 
-func TestSimulate_100op_100p(t *testing.T)   { testSimulate(t, nil, 1, 100, 100) }
-func TestSimulate_1000op_100p(t *testing.T)  { testSimulate(t, nil, 1, 1000, 100) }
+func TestSimulate_100op_100p(t *testing.T)  { testSimulate(t, nil, 1, 100, 100) }
+func TestSimulate_1000op_100p(t *testing.T) { testSimulate(t, nil, 1, 1000, 100) }
 
 func TestSimulate_10000op_100p(t *testing.T) {
 	if testing.Short() {

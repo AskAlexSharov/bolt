@@ -468,7 +468,7 @@ func (cmd *PageItemCommand) Run(args ...string) error {
 	}
 
 	if options.keyOnly && options.valueOnly {
-		return fmt.Errorf("The --key-only or --value-only flag may be set, but not both.")
+		return fmt.Errorf("the --key-only or --value-only flag may be set, but not both")
 	}
 
 	// Require database path and page id.
@@ -523,7 +523,7 @@ func (cmd *PageItemCommand) Run(args ...string) error {
 func (cmd *PageItemCommand) leafPageElement(pageBytes []byte, index uint16) (*leafPageElement, error) {
 	p := (*page)(unsafe.Pointer(&pageBytes[0]))
 	if index >= p.count {
-		return nil, fmt.Errorf("leafPageElement: expected item index less than %d, but got %d.", p.count, index)
+		return nil, fmt.Errorf("leafPageElement: expected item index less than %d, but got %d", p.count, index)
 	}
 	if p.Type() != "leaf" {
 		return nil, fmt.Errorf("leafPageElement: expected page type of 'leaf', but got '%s'", p.Type())
@@ -903,7 +903,7 @@ func (cmd *PagesCommand) Run(args ...string) error {
 			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-6s %-6s\n", p.ID, p.Type, count, overflow)
 
 			// Move to the next non-overflow page.
-			id += 1
+			id++
 			if p.Type != "free" {
 				id += p.OverflowCount
 			}
@@ -976,7 +976,7 @@ func (cmd *StatsCommand) Run(args ...string) error {
 		if err := tx.ForEach(func(name []byte, b *bolt.Bucket) error {
 			if bytes.HasPrefix(name, []byte(prefix)) {
 				s.Add(b.Stats())
-				count += 1
+				count++
 			}
 			return nil
 		}); err != nil {
@@ -1695,17 +1695,17 @@ func (cmd *BenchCommand) startProfiling(options *BenchOptions) {
 	if options.CPUProfile != "" {
 		cpuprofile, err = os.Create(options.CPUProfile)
 		if err != nil {
-			fmt.Fprintf(cmd.Stderr, "bench: could not create cpu profile %q: %v\n", options.CPUProfile, err)
+			_, _ = fmt.Fprintf(cmd.Stderr, "bench: could not create cpu profile %q: %v\n", options.CPUProfile, err)
 			os.Exit(1)
 		}
-		pprof.StartCPUProfile(cpuprofile)
+		_ = pprof.StartCPUProfile(cpuprofile)
 	}
 
 	// Start memory profiling.
 	if options.MemProfile != "" {
 		memprofile, err = os.Create(options.MemProfile)
 		if err != nil {
-			fmt.Fprintf(cmd.Stderr, "bench: could not create memory profile %q: %v\n", options.MemProfile, err)
+			_, _ = fmt.Fprintf(cmd.Stderr, "bench: could not create memory profile %q: %v\n", options.MemProfile, err)
 			os.Exit(1)
 		}
 		runtime.MemProfileRate = 4096
@@ -1715,7 +1715,7 @@ func (cmd *BenchCommand) startProfiling(options *BenchOptions) {
 	if options.BlockProfile != "" {
 		blockprofile, err = os.Create(options.BlockProfile)
 		if err != nil {
-			fmt.Fprintf(cmd.Stderr, "bench: could not create block profile %q: %v\n", options.BlockProfile, err)
+			_, _ = fmt.Fprintf(cmd.Stderr, "bench: could not create block profile %q: %v\n", options.BlockProfile, err)
 			os.Exit(1)
 		}
 		runtime.SetBlockProfileRate(1)
@@ -1726,19 +1726,19 @@ func (cmd *BenchCommand) startProfiling(options *BenchOptions) {
 func (cmd *BenchCommand) stopProfiling() {
 	if cpuprofile != nil {
 		pprof.StopCPUProfile()
-		cpuprofile.Close()
+		_ = cpuprofile.Close()
 		cpuprofile = nil
 	}
 
 	if memprofile != nil {
 		pprof.Lookup("heap").WriteTo(memprofile, 0)
-		memprofile.Close()
+		_ = memprofile.Close()
 		memprofile = nil
 	}
 
 	if blockprofile != nil {
 		pprof.Lookup("block").WriteTo(blockprofile, 0)
-		blockprofile.Close()
+		_ = blockprofile.Close()
 		blockprofile = nil
 		runtime.SetBlockProfileRate(0)
 	}
@@ -1890,7 +1890,7 @@ func ReadPageSize(path string) (int, error) {
 
 // atois parses a slice of strings into integers.
 func atois(strs []string) ([]int, error) {
-	var a []int
+	a := make([]int, 0, len(strs))
 	for _, str := range strs {
 		i, err := strconv.Atoi(str)
 		if err != nil {

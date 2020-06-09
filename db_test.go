@@ -591,9 +591,9 @@ func TestDB_Concurrent_WriteTo(t *testing.T) {
 			panic(err)
 		}
 		time.Sleep(time.Duration(rand.Intn(20)+1) * time.Millisecond)
-		tx.WriteTo(f)
-		tx.Rollback()
-		f.Close()
+		_, _ = tx.WriteTo(f)
+		_ = tx.Rollback()
+		_ = f.Close()
 		snap := &DB{nil, f.Name(), o}
 		snap.MustReopen()
 		defer snap.MustClose()
@@ -1445,6 +1445,7 @@ func ExampleDB_View() {
 	// John's last name is doe.
 }
 
+//nolint:govet
 func ExampleDB_Begin_ReadOnly() {
 	// Open the database.
 	db, err := bolt.Open(tempfile(), 0666, nil)
