@@ -30,7 +30,6 @@ linters:
     - ineffassign
     - depguard
     - typecheck
-    - unused
     - misspell
 
 linters-settings:
@@ -55,3 +54,7 @@ issues:
     - linters:
         - stylecheck
       text: "(should be|should have name of the form)"
+    - linters:
+        - structcheck
+      text: "(is unused)"
+

@@ -1445,6 +1445,7 @@ func ExampleDB_View() {
 	// John's last name is doe.
 }
 
+//nolint:govet
 func ExampleDB_Begin_ReadOnly() {
 	// Open the database.
 	db, err := bolt.Open(tempfile(), 0666, nil)

@@ -468,7 +468,7 @@ func (cmd *PageItemCommand) Run(args ...string) error {
 	}
 
 	if options.keyOnly && options.valueOnly {
-		return fmt.Errorf("The --key-only or --value-only flag may be set, but not both.")
+		return fmt.Errorf("the --key-only or --value-only flag may be set, but not both")
 	}
 
 	// Require database path and page id.
@@ -523,7 +523,7 @@ func (cmd *PageItemCommand) Run(args ...string) error {
 func (cmd *PageItemCommand) leafPageElement(pageBytes []byte, index uint16) (*leafPageElement, error) {
 	p := (*page)(unsafe.Pointer(&pageBytes[0]))
 	if index >= p.count {
-		return nil, fmt.Errorf("leafPageElement: expected item index less than %d, but got %d.", p.count, index)
+		return nil, fmt.Errorf("leafPageElement: expected item index less than %d, but got %d", p.count, index)
 	}
 	if p.Type() != "leaf" {
 		return nil, fmt.Errorf("leafPageElement: expected page type of 'leaf', but got '%s'", p.Type())
@@ -1890,7 +1890,7 @@ func ReadPageSize(path string) (int, error) {
 
 // atois parses a slice of strings into integers.
 func atois(strs []string) ([]int, error) {
-	var a []int
+	a := make([]int, 0, len(strs))
 	for _, str := range strs {
 		i, err := strconv.Atoi(str)
 		if err != nil {

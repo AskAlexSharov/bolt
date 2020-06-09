@@ -729,7 +729,7 @@ func (db *DB) removeTx(tx *Tx) {
 // `bucket.First()`, `bucket.Next()`, `bucket.Last()`, `bucket.Seek()` have been consumed,
 // or copied, and it is ok to invalidate the memory underneath them.
 func (db *DB) yieldTx(tx *Tx) {
-	// If the db.mmap() function is trying to aquire exclusive lock on db.mmaplock
+	// If the db.mmap() function is trying to acquire exclusive lock on db.mmaplock
 	// when we release this read lock, it won't allow more readers (read-only) transactions
 	// to begin. Therefore, before we re-lock with db.mmaplock.Rlock(), the db.mmap()
 	// would have had the opportunity to resize the memory map and fix our raw pointers

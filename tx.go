@@ -375,7 +375,7 @@ func (tx *Tx) Yield() {
 		panic("Yielding is not possible for writeable transactions")
 	}
 	if tx.db == nil {
-		panic("Trying to yeild closed transaction")
+		panic("Trying to yield closed transaction")
 	}
 	tx.db.yieldTx(tx)
 }
@@ -643,7 +643,7 @@ func (tx *Tx) write() error {
 		for i := range buf {
 			buf[i] = 0
 		}
-		tx.db.pagePool.Put(buf)
+		tx.db.pagePool.Put(buf) //nolint:staticcheck
 	}
 
 	return nil

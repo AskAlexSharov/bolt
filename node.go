@@ -489,7 +489,7 @@ func (n *node) splitIndex(threshold int) (index, sz uintptr) {
 		sz += elsize
 	}
 
-	return
+	return index, sz
 }
 
 // spill writes the nodes to dirty pages and splits nodes as it goes.
