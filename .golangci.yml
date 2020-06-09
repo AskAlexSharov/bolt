@@ -10,7 +10,7 @@ run:
 linters:
   disable-all: true
   enable:
-#    - errcheck
+    #    - errcheck
     - goconst
     - gofmt
     #    - golint

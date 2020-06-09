@@ -1189,7 +1189,7 @@ type Stats struct {
 	TxN     int // total number of started read transactions
 	OpenTxN int // number of currently open read transactions
 
-	TxStats    TxStats               // global, ongoing stats.
+	TxStats TxStats // global, ongoing stats.
 }
 
 // Sub calculates and returns the difference between two sets of database stats.
